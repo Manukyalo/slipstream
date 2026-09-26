@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      drag_runs: {
+        Row: {
+          distance_type: string
+          elapsed_ms: number
+          id: string
+          recorded_at: string
+          top_speed: number
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          distance_type: string
+          elapsed_ms: number
+          id?: string
+          recorded_at?: string
+          top_speed?: number
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          distance_type?: string
+          elapsed_ms?: number
+          id?: string
+          recorded_at?: string
+          top_speed?: number
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drag_runs_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1268,3 +1306,6 @@ export type VehicleModel = Database['public']['Tables']['vehicle_models']['Row']
 export type Vehicle = Database['public']['Tables']['vehicles']['Row'];
 export type VehicleInsert = Database['public']['Tables']['vehicles']['Insert'];
 export type VehicleUpdate = Database['public']['Tables']['vehicles']['Update'];
+export type DragRun = Database['public']['Tables']['drag_runs']['Row'];
+export type DragRunInsert = Database['public']['Tables']['drag_runs']['Insert'];
+export type DragRunUpdate = Database['public']['Tables']['drag_runs']['Update'];
