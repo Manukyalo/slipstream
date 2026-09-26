@@ -1,25 +1,70 @@
 {
   "expo": {
-    "name": "slipstream",
+    "name": "Slipstream",
     "slug": "slipstream",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "scheme": "slipstream",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#080B14",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Slipstream uses your location continuously to record trip routes, detect speed camera zones, and time drag-race runs. Your location data is stored privately on your account.",
+          "locationWhenInUsePermission": "Slipstream uses your location to show your position on the map and record trip routes.",
+          "locationAlwaysPermission": "Slipstream uses your location in the background to continue recording trips and send radar alerts while the app is minimised.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "@maplibre/maplibre-react-native"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "85ef135f-87ea-466c-b9f3-0abb2c3ab45c"
+      }
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.slipstream.app",
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Slipstream records your trip route and detects radar zones. Location runs in the background so recording continues when the screen is off.",
+        "NSLocationWhenInUsePermission": "Slipstream uses your location to display your map position and record trips.",
+        "NSLocationAlwaysUsageDescription": "Slipstream records your trip route in the background so you don't have to keep the screen on while driving.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
     },
     "android": {
+      "package": "com.slipstream.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#080B14",
+        "foregroundImage": "./assets/adaptive-icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
