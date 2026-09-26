@@ -104,6 +104,83 @@ export type Database = {
         }
         Relationships: []
       }
+      vehicle_makes: {
+        Row: {
+          id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          name: string
+        }
+        Update: {
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      vehicle_models: {
+        Row: {
+          id: string
+          make_id: string
+          name: string
+        }
+        Insert: {
+          id?: string
+          make_id: string
+          name: string
+        }
+        Update: {
+          id?: string
+          make_id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicle_models_make_id_fkey"
+            columns: ["make_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_makes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vehicles: {
+        Row: {
+          created_at: string
+          id: string
+          is_primary: boolean
+          make: string
+          model: string
+          nickname: string | null
+          photo_url: string | null
+          user_id: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          make: string
+          model: string
+          nickname?: string | null
+          photo_url?: string | null
+          user_id: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          make?: string
+          model?: string
+          nickname?: string | null
+          photo_url?: string | null
+          user_id?: string
+          year?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       geography_columns: {
@@ -1181,8 +1258,13 @@ export const Constants = {
   public: {
     Enums: {},
   },
-} as const;
+} as const
+
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Trip = Database['public']['Tables']['trips']['Row'];
-export type TripInsert = Database['public']['Tables']['trips']['Insert'];
+export type VehicleMake = Database['public']['Tables']['vehicle_makes']['Row'];
+export type VehicleModel = Database['public']['Tables']['vehicle_models']['Row'];
+export type Vehicle = Database['public']['Tables']['vehicles']['Row'];
+export type VehicleInsert = Database['public']['Tables']['vehicles']['Insert'];
+export type VehicleUpdate = Database['public']['Tables']['vehicles']['Update'];

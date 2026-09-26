@@ -223,8 +223,24 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Single batched insert into Supabase trips table
     if (user?.id) {
       try {
+        let vehicleId: string | null = null;
+        try {
+          const { data: primaryVehicle } = await supabase
+            .from('vehicles')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('is_primary', true)
+            .maybeSingle();
+          if (primaryVehicle) {
+            vehicleId = primaryVehicle.id;
+          }
+        } catch (vehErr) {
+          console.warn('[TrackingContext] Could not fetch primary vehicle:', vehErr);
+        }
+
         const payload = {
           user_id: user.id,
+          vehicle_id: vehicleId,
           route: metrics.lineStringWkt,
           distance_m: metrics.distanceMeters,
           duration_s: metrics.durationSeconds,

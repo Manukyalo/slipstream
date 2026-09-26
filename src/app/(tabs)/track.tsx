@@ -5,6 +5,7 @@ import { useTracking } from '@/contexts/TrackingContext';
 import { Speedometer } from '@/components/tracking/Speedometer';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
 import { useOfflineMap } from '@/hooks/useOfflineMap';
+import { useVehicles } from '@/hooks/useVehicles';
 import { TripMetrics } from '@/utils/telemetry';
 
 export default function TrackScreen() {
@@ -22,6 +23,7 @@ export default function TrackScreen() {
     requestPermissions,
   } = useTracking();
 
+  const { primaryVehicle } = useVehicles();
   const { downloadState, downloadCurrentArea } = useOfflineMap();
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
 
@@ -96,6 +98,15 @@ export default function TrackScreen() {
 
       {/* Cockpit telemetry panel in bottom half */}
       <View style={styles.telemetryContainer}>
+        {primaryVehicle ? (
+          <View style={styles.vehiclePill}>
+            <Text style={styles.vehiclePillText} numberOfLines={1}>
+              🏎️ {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
+              {primaryVehicle.nickname ? ` · ${primaryVehicle.nickname}` : ''}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.speedometerWrap}>
           <Speedometer speedKmh={currentSpeedKmh} topSpeedKmh={topSpeedKmh} />
         </View>
@@ -304,5 +315,20 @@ const styles = StyleSheet.create({
   },
   btnPressed: {
     opacity: 0.85,
+  },
+  vehiclePill: {
+    alignSelf: 'center',
+    backgroundColor: Colors.bgElevated,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.xs,
+  },
+  vehiclePillText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.caption,
+    color: Colors.accentCyan,
   },
 });
