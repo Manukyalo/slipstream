@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
-import { supabase } from '@/lib/supabase';
+import { saveTrip } from '@/services/trips';
+import { fetchUserVehicles } from '@/services/vehicles';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   GpsSample,
@@ -225,12 +226,8 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         let vehicleId: string | null = null;
         try {
-          const { data: primaryVehicle } = await supabase
-            .from('vehicles')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('is_primary', true)
-            .maybeSingle();
+          const userVehicles = await fetchUserVehicles(user.id);
+          const primaryVehicle = userVehicles.find((v) => v.is_primary) ?? userVehicles[0];
           if (primaryVehicle) {
             vehicleId = primaryVehicle.id;
           }
@@ -251,12 +248,9 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ended_at: new Date(endTime).toISOString(),
         };
 
-        const { error } = await supabase.from('trips').insert(payload);
-        if (error) {
-          console.error('[TrackingContext] Failed to insert trip:', error);
-        }
+        await saveTrip(payload);
       } catch (insertErr) {
-        console.error('[TrackingContext] Exception inserting trip:', insertErr);
+        console.error('[TrackingContext] Exception saving trip:', insertErr);
       }
     }
 

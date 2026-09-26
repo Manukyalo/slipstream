@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { withCache } from '@/services/cache';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -39,27 +40,31 @@ export async function fetchTopSpeedLeaderboard(
   sameCarFilter?: SameCarFilter,
   limit = 50,
 ): Promise<TopSpeedEntry[]> {
-  const { data, error } = await supabase.rpc('get_top_speed_leaderboard', {
-    scope_type: scope,
-    filter_make: sameCarFilter?.make ?? null,
-    filter_model: sameCarFilter?.model ?? null,
-    limit_count: limit,
+  const cacheKey = `leaderboard:top_speed:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+
+  return withCache(cacheKey, 60, async () => {
+    const { data, error } = await supabase.rpc('get_top_speed_leaderboard', {
+      scope_type: scope,
+      filter_make: sameCarFilter?.make ?? null,
+      filter_model: sameCarFilter?.model ?? null,
+      limit_count: limit,
+    });
+
+    if (error) throw new Error(`top_speed_leaderboard: ${error.message}`);
+
+    // RPC returns numeric rank as bigint string in some Postgres drivers
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      rank: Number(row.rank),
+      user_id: row.user_id as string,
+      display_name: (row.display_name as string | null) ?? 'Driver',
+      avatar_url: row.avatar_url as string | null,
+      make: row.make as string | null,
+      model: row.model as string | null,
+      year: row.year != null ? Number(row.year) : null,
+      top_speed: Number(row.top_speed),
+      recorded_at: row.recorded_at as string,
+    }));
   });
-
-  if (error) throw new Error(`top_speed_leaderboard: ${error.message}`);
-
-  // RPC returns numeric rank as bigint string in some Postgres drivers
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    rank: Number(row.rank),
-    user_id: row.user_id as string,
-    display_name: (row.display_name as string | null) ?? 'Driver',
-    avatar_url: row.avatar_url as string | null,
-    make: row.make as string | null,
-    model: row.model as string | null,
-    year: row.year != null ? Number(row.year) : null,
-    top_speed: Number(row.top_speed),
-    recorded_at: row.recorded_at as string,
-  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -87,28 +92,32 @@ export async function fetchDragLeaderboard(
   sameCarFilter?: SameCarFilter,
   limit = 50,
 ): Promise<DragEntry[]> {
-  const { data, error } = await supabase.rpc('get_drag_leaderboard', {
-    target_distance_type: distanceType,
-    scope_type: scope,
-    filter_make: sameCarFilter?.make ?? null,
-    filter_model: sameCarFilter?.model ?? null,
-    limit_count: limit,
+  const cacheKey = `leaderboard:drag:${distanceType}:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+
+  return withCache(cacheKey, 60, async () => {
+    const { data, error } = await supabase.rpc('get_drag_leaderboard', {
+      target_distance_type: distanceType,
+      scope_type: scope,
+      filter_make: sameCarFilter?.make ?? null,
+      filter_model: sameCarFilter?.model ?? null,
+      limit_count: limit,
+    });
+
+    if (error) throw new Error(`drag_leaderboard: ${error.message}`);
+
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      rank: Number(row.rank),
+      user_id: row.user_id as string,
+      display_name: (row.display_name as string | null) ?? 'Driver',
+      avatar_url: row.avatar_url as string | null,
+      make: row.make as string | null,
+      model: row.model as string | null,
+      year: row.year != null ? Number(row.year) : null,
+      elapsed_ms: Number(row.elapsed_ms),
+      top_speed: Number(row.top_speed),
+      recorded_at: row.recorded_at as string,
+    }));
   });
-
-  if (error) throw new Error(`drag_leaderboard: ${error.message}`);
-
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    rank: Number(row.rank),
-    user_id: row.user_id as string,
-    display_name: (row.display_name as string | null) ?? 'Driver',
-    avatar_url: row.avatar_url as string | null,
-    make: row.make as string | null,
-    model: row.model as string | null,
-    year: row.year != null ? Number(row.year) : null,
-    elapsed_ms: Number(row.elapsed_ms),
-    top_speed: Number(row.top_speed),
-    recorded_at: row.recorded_at as string,
-  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -131,23 +140,27 @@ export async function fetchDistanceLeaderboard(
   sameCarFilter?: SameCarFilter,
   limit = 50,
 ): Promise<DistanceEntry[]> {
-  const { data, error } = await supabase.rpc('get_distance_leaderboard', {
-    scope_type: scope,
-    filter_make: sameCarFilter?.make ?? null,
-    filter_model: sameCarFilter?.model ?? null,
-    limit_count: limit,
+  const cacheKey = `leaderboard:distance:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+
+  return withCache(cacheKey, 60, async () => {
+    const { data, error } = await supabase.rpc('get_distance_leaderboard', {
+      scope_type: scope,
+      filter_make: sameCarFilter?.make ?? null,
+      filter_model: sameCarFilter?.model ?? null,
+      limit_count: limit,
+    });
+
+    if (error) throw new Error(`distance_leaderboard: ${error.message}`);
+
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      rank: Number(row.rank),
+      user_id: row.user_id as string,
+      display_name: (row.display_name as string | null) ?? 'Driver',
+      avatar_url: row.avatar_url as string | null,
+      make: row.make as string | null,
+      model: row.model as string | null,
+      total_distance_m: Number(row.total_distance_m),
+      total_trips: Number(row.total_trips),
+    }));
   });
-
-  if (error) throw new Error(`distance_leaderboard: ${error.message}`);
-
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    rank: Number(row.rank),
-    user_id: row.user_id as string,
-    display_name: (row.display_name as string | null) ?? 'Driver',
-    avatar_url: row.avatar_url as string | null,
-    make: row.make as string | null,
-    model: row.model as string | null,
-    total_distance_m: Number(row.total_distance_m),
-    total_trips: Number(row.total_trips),
-  }));
 }

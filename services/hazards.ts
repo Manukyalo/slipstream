@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { withCache } from '@/services/cache';
 
 export type HazardType = 'speed_trap' | 'camera' | 'police';
 
@@ -40,45 +41,79 @@ export const HAZARD_CONFIG: Record<
 
 /**
  * Report a new hazard at the user's current GPS location.
+ * Routes through the rate-limited Edge Function, falling back to direct RPC.
  */
 export async function reportHazard(
   type: HazardType,
   lon: number,
   lat: number,
 ): Promise<void> {
-  const { error } = await supabase.rpc('report_hazard', {
-    hazard_type: type,
-    lon,
-    lat,
-  });
+  try {
+    const { data, error } = await supabase.functions.invoke('report-hazard', {
+      body: { hazard_type: type, lon, lat },
+    });
 
-  if (error) {
-    console.error('[HazardService] Failed to report hazard:', error.message);
-    throw new Error(`Failed to report hazard: ${error.message}`);
+    if (error) {
+      // Check if it's an explicit 429 rate-limit response from Edge function
+      if (error.message?.includes('Rate limit') || error.message?.includes('429')) {
+        throw new Error('Rate limit exceeded: Max 5 hazard reports per 10 minutes. Please slow down.');
+      }
+      throw error;
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+    return;
+  } catch (edgeErr) {
+    // If rate limit error, propagate it
+    const msg = edgeErr instanceof Error ? edgeErr.message : String(edgeErr);
+    if (msg.includes('Rate limit')) {
+      throw edgeErr;
+    }
+
+    // Edge function unavailable or failed: fallback to direct RPC with database rate limiting
+    const { error: rpcErr } = await supabase.rpc('report_hazard', {
+      hazard_type: type,
+      lon,
+      lat,
+    });
+
+    if (rpcErr) {
+      console.error('[HazardService] Direct RPC fallback also failed:', rpcErr.message);
+      throw new Error(`Failed to report hazard: ${rpcErr.message}`);
+    }
   }
 }
 
 /**
  * Query active nearby hazards within specified radius using PostGIS ST_DWithin.
+ * Caches hot reads in Redis/memory with a 30s TTL across a ~200m spatial grid tile.
  */
 export async function fetchNearbyHazards(
   lon: number,
   lat: number,
   radiusMeters = 2500,
 ): Promise<NearbyHazard[]> {
-  const { data, error } = await supabase.rpc('get_nearby_hazards', {
-    user_lon: lon,
-    user_lat: lat,
-    radius_meters: radiusMeters,
+  // Quantize coordinates to ~200m grid cells (0.002 deg) for distributed tile caching
+  const latTile = (Math.round(lat * 500) / 500).toFixed(3);
+  const lonTile = (Math.round(lon * 500) / 500).toFixed(3);
+  const cacheKey = `hazards:tile:${latTile}:${lonTile}:${radiusMeters}`;
+
+  return withCache(cacheKey, 30, async () => {
+    const { data, error } = await supabase.rpc('get_nearby_hazards', {
+      user_lon: lon,
+      user_lat: lat,
+      radius_meters: radiusMeters,
+    });
+
+    if (error) {
+      console.error('[HazardService] Failed to query nearby hazards:', error.message);
+      return [];
+    }
+
+    return (data as NearbyHazard[]) ?? [];
   });
-
-  if (error) {
-    console.error('[HazardService] Failed to query nearby hazards:', error.message);
-    return [];
-  }
-
-  // Map to strongly-typed array
-  return (data as NearbyHazard[]) ?? [];
 }
 
 /**
