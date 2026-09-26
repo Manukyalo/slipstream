@@ -40,8 +40,9 @@ function RootNavigation() {
     if (status === 'loading' || !fontsLoaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inInviteGroup = segments[0] === 'i';
 
-    if (status === 'unauthenticated' && !inAuthGroup) {
+    if (status === 'unauthenticated' && !inAuthGroup && !inInviteGroup) {
       router.replace('/(auth)/login');
     } else if (status === 'authenticated' && inAuthGroup) {
       router.replace('/(tabs)/track');

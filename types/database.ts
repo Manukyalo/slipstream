@@ -114,20 +114,62 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          referral_code: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id: string
+          referral_code?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
+          referral_code?: string | null
         }
         Relationships: []
+      }
+      referrals: {
+        Row: {
+          created_at: string
+          id: string
+          referral_code: string
+          referred_user_id: string
+          referrer_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          referral_code: string
+          referred_user_id: string
+          referrer_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          referral_code?: string
+          referred_user_id?: string
+          referrer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referrals_referred_user_id_fkey"
+            columns: ["referred_user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referrals_referrer_id_fkey"
+            columns: ["referrer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       spatial_ref_sys: {
         Row: {
@@ -448,6 +490,10 @@ export type Database = {
             }
             Returns: string
           }
+      claim_referral_code: {
+        Args: { referral_code_input: string }
+        Returns: Json
+      }
       confirm_hazard: { Args: { target_hazard_id: string }; Returns: number }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
@@ -1458,3 +1504,5 @@ export type DragRunInsert = Database['public']['Tables']['drag_runs']['Insert'];
 export type DragRunUpdate = Database['public']['Tables']['drag_runs']['Update'];
 export type HazardReport = Database['public']['Tables']['hazard_reports']['Row'];
 export type HazardReportInsert = Database['public']['Tables']['hazard_reports']['Insert'];
+export type Referral = Database['public']['Tables']['referrals']['Row'];
+export type ReferralInsert = Database['public']['Tables']['referrals']['Insert'];

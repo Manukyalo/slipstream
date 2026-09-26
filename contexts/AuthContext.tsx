@@ -23,8 +23,8 @@ interface AuthContextValue {
   profile: Profile | null;
   /** Sign in with email + password */
   signInWithEmail: (email: string, password: string) => Promise<AuthError | null>;
-  /** Sign up with email + password */
-  signUpWithEmail: (email: string, password: string) => Promise<AuthError | null>;
+  /** Sign up with email + password, with optional referral attribution code */
+  signUpWithEmail: (email: string, password: string, referralCode?: string) => Promise<AuthError | null>;
   /** Sign out */
   signOut: () => Promise<void>;
   /** Refresh profile from DB */
@@ -124,8 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signUpWithEmail = useCallback(
-    async (email: string, password: string): Promise<AuthError | null> => {
-      const { error } = await supabase.auth.signUp({ email, password });
+    async (email: string, password: string, referralCode?: string): Promise<AuthError | null> => {
+      const options = referralCode ? { data: { referral_code: referralCode } } : undefined;
+      const { error } = await supabase.auth.signUp({ email, password, options });
       return error;
     },
     [],

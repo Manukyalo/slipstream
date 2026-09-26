@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,42 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
+import { useLocalSearchParams } from 'expo-router';
+import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  getPendingReferralCode,
+  clearPendingReferralCode,
+  claimReferralCode,
+} from '@/services/referrals';
 
 export default function LoginScreen() {
   const { signInWithEmail, signUpWithEmail } = useAuth();
+  const params = useLocalSearchParams<{ mode?: string; referralCode?: string }>();
 
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup'>(
+    params.mode === 'signup' || params.referralCode ? 'signup' : 'signin',
+  );
+  const [referralCode, setReferralCode] = useState<string | null>(
+    params.referralCode ? params.referralCode.trim().toUpperCase() : null,
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkPendingReferral() {
+      if (!referralCode) {
+        const pending = await getPendingReferralCode();
+        if (pending) {
+          setReferralCode(pending);
+          setMode('signup');
+        }
+      }
+    }
+    checkPendingReferral();
+  }, [referralCode]);
 
   const handleSubmit = async () => {
     if (!email.trim() || !password) {
@@ -34,10 +59,14 @@ export default function LoginScreen() {
       const err =
         mode === 'signin'
           ? await signInWithEmail(email.trim(), password)
-          : await signUpWithEmail(email.trim(), password);
+          : await signUpWithEmail(email.trim(), password, referralCode ?? undefined);
 
       if (err) {
         setErrorMessage(err.message);
+      } else if (mode === 'signup' && referralCode) {
+        // Also call claim directly for idempotency in case email auto-confirms
+        claimReferralCode(referralCode).catch(() => {});
+        await clearPendingReferralCode();
       }
     } finally {
       setLoading(false);
@@ -85,6 +114,21 @@ export default function LoginScreen() {
               </Text>
             </Pressable>
           </View>
+
+          {mode === 'signup' && referralCode ? (
+            <View style={styles.referralBanner}>
+              <View style={styles.referralIconContainer}>
+                <Text style={styles.referralIcon}>🏎️</Text>
+              </View>
+              <View style={styles.referralContent}>
+                <Text style={styles.referralTitle}>Driver Invite Applied</Text>
+                <Text style={styles.referralCodeText}>
+                  VIP Referral Code:{' '}
+                  <Text style={styles.referralCodeHighlight}>{referralCode}</Text>
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {errorMessage ? (
             <View style={styles.errorBox}>
@@ -256,5 +300,46 @@ const styles = StyleSheet.create({
   },
   btnPressed: {
     opacity: 0.85,
+  },
+  referralBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.accentCyanDim,
+    borderColor: Colors.accentCyan,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+  },
+  referralIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.bgSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  referralIcon: {
+    fontSize: 18,
+  },
+  referralContent: {
+    flex: 1,
+  },
+  referralTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.label,
+    color: Colors.accentCyan,
+    letterSpacing: 0.5,
+  },
+  referralCodeText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.caption,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  referralCodeHighlight: {
+    fontFamily: FontFamily.bold,
+    color: Colors.textPrimary,
   },
 });

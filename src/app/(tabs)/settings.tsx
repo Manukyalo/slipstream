@@ -12,6 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/hooks/useVehicles';
+import { useReferral } from '@/hooks/useReferral';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { VehicleCard } from '@/components/vehicles/VehicleCard';
 import { AddVehicleModal } from '@/components/vehicles/AddVehicleModal';
@@ -26,6 +27,12 @@ export default function SettingsScreen() {
     removeVehicle,
     uploadPhoto,
   } = useVehicles();
+  const {
+    referralCode,
+    totalReferrals,
+    shareInvite,
+    isLoading: isLoadingReferral,
+  } = useReferral();
 
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
 
@@ -85,6 +92,43 @@ export default function SettingsScreen() {
         ) : (
           <SkeletonCard />
         )}
+      </View>
+
+      {/* Driver Referral / Invite Section */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Driver Referral</Text>
+            <Text style={styles.sectionSub}>Invite drivers & track your network</Text>
+          </View>
+        </View>
+
+        <View style={styles.inviteCard}>
+          <View style={styles.inviteCardTop}>
+            <View style={styles.inviteCodeBadge}>
+              <Text style={styles.inviteCodeLabel}>YOUR INVITE CODE</Text>
+              <Text style={styles.inviteCodeValue}>
+                {isLoadingReferral ? '••••••' : (referralCode ?? 'DRIVE1')}
+              </Text>
+            </View>
+
+            <View style={styles.referralStatsBadge}>
+              <Text style={styles.referralStatsCount}>{totalReferrals}</Text>
+              <Text style={styles.referralStatsLabel}>Referred</Text>
+            </View>
+          </View>
+
+          <Text style={styles.inviteLinkPreview}>
+            drivetrack.app/i/{referralCode ?? 'DRIVE1'}
+          </Text>
+
+          <Pressable
+            style={({ pressed }) => [styles.shareBtn, pressed && styles.btnPressed]}
+            onPress={() => shareInvite()}
+          >
+            <Text style={styles.shareBtnText}>Share Driver Invite Link</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Garage / Vehicles Section */}
@@ -322,5 +366,74 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semiBold,
     fontSize: FontSize.body,
     color: Colors.accentRed,
+  },
+  inviteCard: {
+    backgroundColor: Colors.bgSurface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.base,
+    gap: Spacing.md,
+  },
+  inviteCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inviteCodeBadge: {
+    backgroundColor: Colors.bgElevated,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  inviteCodeLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.caption,
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+  },
+  inviteCodeValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.h2,
+    color: Colors.accentCyan,
+    letterSpacing: 2,
+    marginTop: 2,
+  },
+  referralStatsBadge: {
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    backgroundColor: Colors.accentCyanDim,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.accentCyan,
+  },
+  referralStatsCount: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.h2,
+    color: Colors.accentCyan,
+  },
+  referralStatsLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.caption,
+    color: Colors.textSecondary,
+  },
+  inviteLinkPreview: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.caption,
+    color: Colors.textMuted,
+  },
+  shareBtn: {
+    backgroundColor: Colors.accentCyan,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.sm,
+    alignItems: 'center',
+  },
+  shareBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.label,
+    color: Colors.textInverse,
   },
 });
