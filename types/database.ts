@@ -59,6 +59,51 @@ export type Database = {
         }
         Relationships: []
       }
+      trips: {
+        Row: {
+          avg_speed: number
+          created_at: string
+          distance_m: number
+          duration_s: number
+          ended_at: string
+          id: string
+          route: unknown
+          speed_samples: Json
+          started_at: string
+          top_speed: number
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          avg_speed?: number
+          created_at?: string
+          distance_m?: number
+          duration_s?: number
+          ended_at: string
+          id?: string
+          route?: unknown
+          speed_samples?: Json
+          started_at: string
+          top_speed?: number
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          avg_speed?: number
+          created_at?: string
+          distance_m?: number
+          duration_s?: number
+          ended_at?: string
+          id?: string
+          route?: unknown
+          speed_samples?: Json
+          started_at?: string
+          top_speed?: number
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       geography_columns: {
@@ -1136,6 +1181,8 @@ export const Constants = {
   public: {
     Enums: {},
   },
-} as const
+} as const;
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Trip = Database['public']['Tables']['trips']['Row'];
+export type TripInsert = Database['public']['Tables']['trips']['Insert'];

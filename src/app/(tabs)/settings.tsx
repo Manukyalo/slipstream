@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
 import { useAuth } from '@/contexts/AuthContext';
-import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
+import { SkeletonCard } from '@/components/ui/Skeleton';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();

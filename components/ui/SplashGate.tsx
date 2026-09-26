@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
 
@@ -12,7 +12,10 @@ import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
 // ---------------------------------------------------------------------------
 
 export function SplashGate() {
-  const pulseAnim = useRef(new Animated.Value(0.4)).current;
+  // useState gives a stable reference to the Animated.Value that is safe to
+  // read in render and pass to Animated components without triggering
+  // react-hooks/refs — the initializer runs exactly once.
+  const [pulseAnim] = useState(() => new Animated.Value(0.4));
 
   useEffect(() => {
     const loop = Animated.loop(

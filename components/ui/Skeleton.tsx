@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Duration } from '@/constants/design';
@@ -37,7 +37,9 @@ export function Skeleton({
   baseColor = Colors.bgSurface,
   style,
 }: SkeletonProps) {
-  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  // useState gives us a stable, lint-compliant reference to the Animated.Value
+  // that can be safely read in render without triggering react-hooks/refs.
+  const [shimmerAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -52,8 +54,7 @@ export function Skeleton({
     return () => loop.stop();
   }, [shimmerAnim]);
 
-  // Translate the gradient from -width to +width across the element
-  const resolvedWidth = typeof width === 'number' ? width : 300; // fallback for '%' strings
+  const resolvedWidth = typeof width === 'number' ? width : 300;
   const translateX = shimmerAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-resolvedWidth, resolvedWidth],

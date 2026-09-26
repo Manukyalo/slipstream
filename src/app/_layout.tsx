@@ -11,6 +11,7 @@ import {
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { TrackingProvider } from '@/contexts/TrackingContext';
 import { SplashGate } from '@/components/ui/SplashGate';
 import { Colors } from '@/constants/design';
 
@@ -62,7 +63,9 @@ function RootNavigation() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigation />
+      <TrackingProvider>
+        <RootNavigation />
+      </TrackingProvider>
     </AuthProvider>
   );
 }
