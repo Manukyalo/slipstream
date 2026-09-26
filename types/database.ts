@@ -580,6 +580,45 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_distance_leaderboard: {
+        Args: {
+          filter_make?: string | null
+          filter_model?: string | null
+          limit_count?: number
+          scope_type?: string
+        }
+        Returns: {
+          avatar_url: string | null
+          display_name: string
+          make: string | null
+          model: string | null
+          rank: number
+          total_distance_m: number
+          total_trips: number
+          user_id: string
+        }[]
+      }
+      get_drag_leaderboard: {
+        Args: {
+          filter_make?: string | null
+          filter_model?: string | null
+          limit_count?: number
+          scope_type?: string
+          target_distance_type?: string
+        }
+        Returns: {
+          avatar_url: string | null
+          display_name: string
+          elapsed_ms: number
+          make: string | null
+          model: string | null
+          rank: number
+          recorded_at: string
+          top_speed: number
+          user_id: string
+          year: number | null
+        }[]
+      }
       get_nearby_hazards: {
         Args: { radius_meters?: number; user_lat: number; user_lon: number }
         Returns: {
@@ -592,6 +631,25 @@ export type Database = {
           reported_at: string
           type: string
           user_id: string
+        }[]
+      }
+      get_top_speed_leaderboard: {
+        Args: {
+          filter_make?: string | null
+          filter_model?: string | null
+          limit_count?: number
+          scope_type?: string
+        }
+        Returns: {
+          avatar_url: string | null
+          display_name: string
+          make: string | null
+          model: string | null
+          rank: number
+          recorded_at: string
+          top_speed: number
+          user_id: string
+          year: number | null
         }[]
       }
       gettransactionid: { Args: never; Returns: unknown }
