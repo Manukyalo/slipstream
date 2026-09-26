@@ -52,6 +52,62 @@ export type Database = {
           },
         ]
       }
+      hazard_confirmations: {
+        Row: {
+          created_at: string
+          hazard_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hazard_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hazard_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hazard_confirmations_hazard_id_fkey"
+            columns: ["hazard_id"]
+            isOneToOne: false
+            referencedRelation: "hazard_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hazard_reports: {
+        Row: {
+          confirmations: number
+          expires_at: string
+          id: string
+          location: unknown
+          reported_at: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          confirmations?: number
+          expires_at?: string
+          id?: string
+          location: unknown
+          reported_at?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          confirmations?: number
+          expires_at?: string
+          id?: string
+          location?: unknown
+          reported_at?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -392,6 +448,7 @@ export type Database = {
             }
             Returns: string
           }
+      confirm_hazard: { Args: { target_hazard_id: string }; Returns: number }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -523,6 +580,20 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_nearby_hazards: {
+        Args: { radius_meters?: number; user_lat: number; user_lon: number }
+        Returns: {
+          confirmations: number
+          distance_meters: number
+          expires_at: string
+          id: string
+          latitude: number
+          longitude: number
+          reported_at: string
+          type: string
+          user_id: string
+        }[]
+      }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
       populate_geometry_columns:
@@ -565,6 +636,24 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      report_hazard: {
+        Args: { hazard_type: string; lat: number; lon: number }
+        Returns: {
+          confirmations: number
+          expires_at: string
+          id: string
+          location: unknown
+          reported_at: string
+          type: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "hazard_reports"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
         Returns: unknown
@@ -1309,3 +1398,5 @@ export type VehicleUpdate = Database['public']['Tables']['vehicles']['Update'];
 export type DragRun = Database['public']['Tables']['drag_runs']['Row'];
 export type DragRunInsert = Database['public']['Tables']['drag_runs']['Insert'];
 export type DragRunUpdate = Database['public']['Tables']['drag_runs']['Update'];
+export type HazardReport = Database['public']['Tables']['hazard_reports']['Row'];
+export type HazardReportInsert = Database['public']['Tables']['hazard_reports']['Insert'];

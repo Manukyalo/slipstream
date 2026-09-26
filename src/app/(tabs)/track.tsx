@@ -6,6 +6,9 @@ import { Speedometer } from '@/components/tracking/Speedometer';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
 import { useOfflineMap } from '@/hooks/useOfflineMap';
 import { useVehicles } from '@/hooks/useVehicles';
+import { useHazardAlerts } from '@/hooks/useHazardAlerts';
+import { HazardAlertBanner } from '@/components/hazards/HazardAlertBanner';
+import { HazardReportModal } from '@/components/hazards/HazardReportModal';
 import { TripMetrics } from '@/utils/telemetry';
 
 export default function TrackScreen() {
@@ -25,6 +28,13 @@ export default function TrackScreen() {
 
   const { primaryVehicle } = useVehicles();
   const { downloadState, downloadCurrentArea } = useOfflineMap();
+  const {
+    activeAlert,
+    dismissAlert,
+    confirmCurrentHazard,
+    reportPin,
+  } = useHazardAlerts({ currentCoords, isTracking });
+  const [reportModalVisible, setReportModalVisible] = useState<boolean>(false);
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
 
   const formatDuration = (seconds: number) => {
@@ -63,6 +73,15 @@ export default function TrackScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Approaching Hazard Alert Banner */}
+      {activeAlert && (
+        <HazardAlertBanner
+          hazard={activeAlert}
+          onConfirm={confirmCurrentHazard}
+          onDismiss={dismissAlert}
+        />
+      )}
+
       {/* Map layer in top half */}
       <View style={styles.mapContainer}>
         <SlipstreamMap
@@ -72,7 +91,7 @@ export default function TrackScreen() {
           zoomLevel={15}
         />
 
-        {/* Offline map download CTA overlay */}
+        {/* Map overlay controls */}
         <View style={styles.mapHeaderOverlay}>
           <Pressable
             style={({ pressed }) => [styles.offlineBtn, pressed && styles.btnPressed]}
@@ -81,11 +100,24 @@ export default function TrackScreen() {
           >
             <Text style={styles.offlineBtnText}>
               {downloadState.isDownloading
-                ? `DOWNLOADING ${downloadState.progressPercentage}%`
+                ? `MAP ${downloadState.progressPercentage}%`
                 : downloadState.completed
-                ? 'OFFLINE AREA READY'
-                : 'DOWNLOAD OFFLINE MAP'}
+                ? 'OFFLINE READY'
+                : 'OFFLINE MAP'}
             </Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.hazardPinBtn, pressed && styles.btnPressed]}
+            onPress={() => {
+              if (!currentCoords) {
+                Alert.alert('GPS Required', 'Waiting for location fix to drop a hazard pin.');
+                return;
+              }
+              setReportModalVisible(true);
+            }}
+          >
+            <Text style={styles.hazardPinText}>⚠️ DROP PIN</Text>
           </Pressable>
         </View>
 
@@ -157,6 +189,12 @@ export default function TrackScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <HazardReportModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        onReport={reportPin}
+      />
     </View>
   );
 }
@@ -174,11 +212,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 54,
     right: Spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     zIndex: 10,
+  },
+  hazardPinBtn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.accentRed,
+  },
+  hazardPinText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    color: Colors.accentRed,
+    letterSpacing: 0.5,
   },
   offlineBtn: {
     backgroundColor: 'rgba(8, 11, 20, 0.85)',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
