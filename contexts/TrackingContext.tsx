@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { saveTrip } from '@/services/trips';
+import { enqueueOrExec, generateClientId } from '@/services/offlineQueue';
 import { fetchUserVehicles } from '@/services/vehicles';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -236,6 +237,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
 
         const payload = {
+          client_id: generateClientId(),
           user_id: user.id,
           vehicle_id: vehicleId,
           route: metrics.lineStringWkt,
@@ -248,7 +250,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ended_at: new Date(endTime).toISOString(),
         };
 
-        await saveTrip(payload);
+        await enqueueOrExec('trip', payload, () => saveTrip(payload));
       } catch (insertErr) {
         console.error('[TrackingContext] Exception saving trip:', insertErr);
       }

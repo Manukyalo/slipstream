@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { DragRun, DragRunInsert } from '@/types/database';
+import { enqueueOrExec, generateClientId } from '@/services/offlineQueue';
 
 export type DragDistanceType = 'quarter_mile' | 'half_mile' | 'one_mile';
 export type SprintType = 'zero_to_60' | 'zero_to_100';
@@ -47,7 +48,9 @@ export interface SaveSprintRunInput {
  * Save a completed drag run to Supabase.
  */
 export async function saveDragRun(input: SaveDragRunInput): Promise<DragRun> {
+  const clientId = generateClientId();
   const payload: DragRunInsert = {
+    client_id: clientId,
     user_id: input.userId,
     vehicle_id: input.vehicleId ?? null,
     distance_type: input.distanceType,
@@ -55,18 +58,34 @@ export async function saveDragRun(input: SaveDragRunInput): Promise<DragRun> {
     top_speed: Number(input.topSpeed.toFixed(2)),
   };
 
-  const { data, error } = await supabase
-    .from('drag_runs')
-    .insert(payload)
-    .select()
-    .single();
+  let savedRecord: DragRun | null = null;
 
-  if (error || !data) {
-    console.error('[DragRunService] Failed to save drag run:', error?.message);
-    throw new Error(`Failed to save drag run: ${error?.message ?? 'Unknown error'}`);
-  }
+  await enqueueOrExec('drag_run', payload, async () => {
+    const { data, error } = await supabase
+      .from('drag_runs')
+      .insert(payload)
+      .select()
+      .single();
 
-  return data;
+    if (error || !data) {
+      console.error('[DragRunService] Failed to save drag run:', error?.message);
+      throw new Error(`Failed to save drag run: ${error?.message ?? 'Unknown error'}`);
+    }
+    savedRecord = data;
+  });
+
+  return (
+    savedRecord ?? {
+      id: clientId,
+      user_id: payload.user_id,
+      vehicle_id: payload.vehicle_id ?? null,
+      distance_type: payload.distance_type,
+      elapsed_ms: payload.elapsed_ms,
+      top_speed: payload.top_speed ?? 0,
+      recorded_at: new Date().toISOString(),
+      client_id: clientId,
+    }
+  );
 }
 
 /**

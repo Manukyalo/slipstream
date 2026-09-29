@@ -30,7 +30,8 @@
         }
       ],
       "@maplibre/maplibre-react-native",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-sqlite"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

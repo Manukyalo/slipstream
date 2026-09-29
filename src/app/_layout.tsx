@@ -17,6 +17,8 @@ import { BiometricLockScreen } from '@/components/security/BiometricLockScreen';
 import { isBiometricLockEnabled, authenticateWithBiometrics } from '@/services/biometrics';
 import { Colors } from '@/constants/design';
 import { setupAutoUpdateListener } from '@/services/updates';
+import { startOfflineSync, stopOfflineSync } from '@/services/offlineQueue';
+import { OfflineSyncBanner } from '@/components/ui/OfflineSyncBanner';
 
 // Prevent native splash screen from autohiding before resources/session ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -46,6 +48,13 @@ function RootNavigation() {
     const unsubscribeUpdates = setupAutoUpdateListener();
     return () => {
       unsubscribeUpdates();
+    };
+  }, []);
+
+  useEffect(() => {
+    startOfflineSync();
+    return () => {
+      stopOfflineSync();
     };
   }, []);
 
@@ -109,6 +118,7 @@ function RootNavigation() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      <OfflineSyncBanner />
       <Slot />
     </View>
   );

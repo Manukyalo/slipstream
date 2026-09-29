@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import type { Json } from '@/types/database';
 
 export interface InsertTripPayload {
+  client_id?: string | null;
   user_id: string;
   vehicle_id: string | null;
   route: unknown;

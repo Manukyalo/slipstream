@@ -198,45 +198,47 @@ export function MaintenanceLogScreen({
   const [hasError, setHasError] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    setHasError(false);
-    try {
-      const [fetchedLogs, fetchedSummary] = await Promise.all([
-        fetchMaintenanceLogs(vehicleId),
-        fetchMaintenanceSummary(vehicleId),
-      ]);
-      setLogs(fetchedLogs);
-      setSummary(fetchedSummary);
-    } catch (err) {
-      console.error('[MaintenanceLogScreen] Load failed:', err);
-      setHasError(true);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [vehicleId]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Load data when modal becomes visible
+  // Load data when modal becomes visible or refreshKey increments
   useEffect(() => {
-    if (visible && vehicleId) {
-      loadData();
-    }
-  }, [visible, vehicleId, loadData]);
+    if (!visible || !vehicleId) return;
+    let cancelled = false;
+    const run = async () => {
+      setIsLoading(true);
+      setHasError(false);
+      try {
+        const [fetchedLogs, fetchedSummary] = await Promise.all([
+          fetchMaintenanceLogs(vehicleId),
+          fetchMaintenanceSummary(vehicleId),
+        ]);
+        if (!cancelled) { setLogs(fetchedLogs); setSummary(fetchedSummary); }
+      } catch (err) {
+        console.error('[MaintenanceLogScreen] Load failed:', err);
+        if (!cancelled) setHasError(true);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [visible, vehicleId, refreshKey]);
+
+  const loadData = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const handleDelete = async (logId: string) => {
     try {
       await deleteMaintenanceLog(logId);
-      // Optimistic update — refresh to recompute summary
-      await loadData();
+      loadData(); // refresh to recompute summary
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not delete record.';
       Alert.alert('Error', msg);
     }
   };
 
-  const handleSaved = async () => {
+  const handleSaved = () => {
     setAddModalVisible(false);
-    await loadData();
+    loadData();
   };
 
   return (
@@ -284,7 +286,7 @@ export function MaintenanceLogScreen({
         ) : hasError ? (
           <View style={styles.centered}>
             <Text style={styles.errorIcon}>⚠️</Text>
-            <Text style={styles.errorTitle}>Couldn't load records</Text>
+            <Text style={styles.errorTitle}>Couldn&apos;t load records</Text>
             <Pressable
               style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
               onPress={loadData}

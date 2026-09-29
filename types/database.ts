@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       drag_runs: {
         Row: {
+          client_id?: string | null
           distance_type: string
           elapsed_ms: number
           id: string
@@ -26,6 +27,7 @@ export type Database = {
           vehicle_id: string | null
         }
         Insert: {
+          client_id?: string | null
           distance_type: string
           elapsed_ms: number
           id?: string
@@ -36,6 +38,7 @@ export type Database = {
           vehicle_id?: string | null
         }
         Update: {
+          client_id?: string | null
           distance_type?: string
           elapsed_ms?: number
           id?: string
@@ -83,6 +86,7 @@ export type Database = {
       }
       hazard_reports: {
         Row: {
+          client_id?: string | null
           confirmations: number
           expires_at: string
           id: string
@@ -92,6 +96,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          client_id?: string | null
           confirmations?: number
           expires_at?: string
           id?: string
@@ -101,6 +106,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          client_id?: string | null
           confirmations?: number
           expires_at?: string
           id?: string
@@ -251,6 +257,7 @@ export type Database = {
       trips: {
         Row: {
           avg_speed: number
+          client_id?: string | null
           created_at: string
           distance_m: number
           duration_s: number
@@ -265,6 +272,7 @@ export type Database = {
         }
         Insert: {
           avg_speed?: number
+          client_id?: string | null
           created_at?: string
           distance_m?: number
           duration_s?: number
@@ -279,6 +287,7 @@ export type Database = {
         }
         Update: {
           avg_speed?: number
+          client_id?: string | null
           created_at?: string
           distance_m?: number
           duration_s?: number
@@ -370,6 +379,129 @@ export type Database = {
         }
         Relationships: []
       }
+      tracks: {
+        Row: {
+          created_at: string
+          creator_id: string
+          id: string
+          is_public: boolean
+          location_name: string | null
+          name: string
+          sector_points: Json
+          start_finish_heading: number | null
+          start_finish_point: unknown
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creator_id: string
+          id?: string
+          is_public?: boolean
+          location_name?: string | null
+          name: string
+          sector_points?: Json
+          start_finish_heading?: number | null
+          start_finish_point: unknown
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creator_id?: string
+          id?: string
+          is_public?: boolean
+          location_name?: string | null
+          name?: string
+          sector_points?: Json
+          start_finish_heading?: number | null
+          start_finish_point?: unknown
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      laps: {
+        Row: {
+          id: string
+          lap_time_ms: number
+          path_points: Json
+          recorded_at: string
+          sector_times: Json
+          track_id: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          id?: string
+          lap_time_ms: number
+          path_points?: Json
+          recorded_at?: string
+          sector_times?: Json
+          track_id: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          id?: string
+          lap_time_ms?: number
+          path_points?: Json
+          recorded_at?: string
+          sector_times?: Json
+          track_id?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "laps_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "laps_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      saved_roads: {
+        Row: {
+          centroid: unknown
+          created_at: string
+          description: string | null
+          id: string
+          is_public: boolean
+          length_meters: number
+          name: string
+          route: unknown
+          user_id: string
+        }
+        Insert: {
+          centroid?: unknown
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean
+          length_meters?: number
+          name: string
+          route: unknown
+          user_id: string
+        }
+        Update: {
+          centroid?: unknown
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_public?: boolean
+          length_meters?: number
+          name?: string
+          route?: unknown
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       geography_columns: {
@@ -416,6 +548,53 @@ export type Database = {
       }
     }
     Functions: {
+      get_nearby_roads: {
+        Args: {
+          p_lon: number
+          p_lat: number
+          p_radius?: number
+        }
+        Returns: {
+          id: string
+          user_id: string
+          name: string
+          description: string | null
+          is_public: boolean
+          length_meters: number
+          distance_meters: number
+          route_wkt: string | null
+        }[]
+      }
+      get_nearby_tracks: {
+        Args: {
+          p_lon: number
+          p_lat: number
+          p_radius?: number
+        }
+        Returns: {
+          id: string
+          name: string
+          location_name: string | null
+          creator_id: string
+          start_finish_point: Json
+          start_finish_heading: number | null
+          sector_points: Json
+          is_public: boolean
+          distance_meters: number
+        }[]
+      }
+      get_track_personal_bests: {
+        Args: {
+          p_track_id: string
+          p_user_id?: string | null
+        }
+        Returns: {
+          total_laps: number
+          best_lap_ms: number | null
+          avg_lap_ms: number | null
+          last_session: string | null
+        }
+      }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -1589,4 +1768,10 @@ export type ReferralInsert = Database['public']['Tables']['referrals']['Insert']
 export type MaintenanceLog = Database['public']['Tables']['maintenance_logs']['Row'];
 export type MaintenanceLogInsert = Database['public']['Tables']['maintenance_logs']['Insert'];
 export type MaintenanceLogUpdate = Database['public']['Tables']['maintenance_logs']['Update'];
+export type TrackRow = Database['public']['Tables']['tracks']['Row'];
+export type TrackRowInsert = Database['public']['Tables']['tracks']['Insert'];
+export type LapRow = Database['public']['Tables']['laps']['Row'];
+export type LapRowInsert = Database['public']['Tables']['laps']['Insert'];
+export type SavedRoadRow = Database['public']['Tables']['saved_roads']['Row'];
+export type SavedRoadRowInsert = Database['public']['Tables']['saved_roads']['Insert'];
 

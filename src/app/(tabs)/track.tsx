@@ -11,6 +11,7 @@ import { HazardAlertBanner } from '@/components/hazards/HazardAlertBanner';
 import { HazardReportModal } from '@/components/hazards/HazardReportModal';
 import { LocationConsentModal } from '@/components/compliance/LocationConsentModal';
 import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
+import { SaveRoadModal } from '@/components/roads/SaveRoadModal';
 import { type GenerateRecapCardParams } from '@/services/shareCard';
 import { hasUserConsentedLocation, setUserLocationConsent } from '@/services/compliance';
 import { TripMetrics } from '@/utils/telemetry';
@@ -40,6 +41,7 @@ export default function TrackScreen() {
   } = useHazardAlerts({ currentCoords, isTracking });
   const [reportModalVisible, setReportModalVisible] = useState<boolean>(false);
   const [consentModalVisible, setConsentModalVisible] = useState<boolean>(false);
+  const [saveRoadModalVisible, setSaveRoadModalVisible] = useState<boolean>(false);
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
   const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
@@ -200,23 +202,31 @@ export default function TrackScreen() {
                 {(completedMetrics.distanceMeters / 1000).toFixed(2)} km · Top {completedMetrics.topSpeedKmh} km/h · Avg {completedMetrics.avgSpeedKmh} km/h
               </Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [styles.shareTripBtn, pressed && styles.btnPressed]}
-              onPress={() =>
-                setShareParams({
-                  type: 'trip',
-                  headline: 'SLIPSTREAM TELEMETRY RUN',
-                  topSpeedKmh: completedMetrics.topSpeedKmh,
-                  distanceMeters: completedMetrics.distanceMeters,
-                  durationSeconds: completedMetrics.durationSeconds,
-                  vehicleName: primaryVehicle
-                    ? `${primaryVehicle.year ?? ''} ${primaryVehicle.make} ${primaryVehicle.model}`.trim()
-                    : undefined,
-                })
-              }
-            >
-              <Text style={styles.shareTripBtnText}>📸 SHARE STORY</Text>
-            </Pressable>
+            <View style={styles.savedActionsRow}>
+              <Pressable
+                style={({ pressed }) => [styles.saveRoadBtn, pressed && styles.btnPressed]}
+                onPress={() => setSaveRoadModalVisible(true)}
+              >
+                <Text style={styles.saveRoadBtnText}>🛣️ SAVE ROAD</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.shareTripBtn, pressed && styles.btnPressed]}
+                onPress={() =>
+                  setShareParams({
+                    type: 'trip',
+                    headline: 'SLIPSTREAM TELEMETRY RUN',
+                    topSpeedKmh: completedMetrics.topSpeedKmh,
+                    distanceMeters: completedMetrics.distanceMeters,
+                    durationSeconds: completedMetrics.durationSeconds,
+                    vehicleName: primaryVehicle
+                      ? `${primaryVehicle.year ?? ''} ${primaryVehicle.make} ${primaryVehicle.model}`.trim()
+                      : undefined,
+                  })
+                }
+              >
+                <Text style={styles.shareTripBtnText}>📸 STORY</Text>
+              </Pressable>
+            </View>
           </View>
         ) : null}
 
@@ -251,6 +261,13 @@ export default function TrackScreen() {
         visible={!!shareParams}
         params={shareParams}
         onClose={() => setShareParams(null)}
+      />
+
+      <SaveRoadModal
+        visible={saveRoadModalVisible}
+        onClose={() => setSaveRoadModalVisible(false)}
+        routeWkt={completedMetrics?.lineStringWkt ?? null}
+        distanceMeters={completedMetrics?.distanceMeters ?? 0}
       />
     </View>
   );
@@ -395,10 +412,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
+  savedActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  saveRoadBtn: {
+    backgroundColor: 'rgba(0, 212, 255, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.accentCyan,
+  },
+  saveRoadBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 9,
+    color: Colors.accentCyan,
+    letterSpacing: 0.5,
+  },
   shareTripBtn: {
     backgroundColor: 'rgba(34, 197, 94, 0.25)',
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: Colors.accentGreen,

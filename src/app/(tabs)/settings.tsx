@@ -9,6 +9,7 @@ import {
   Text,
   View,
   Share,
+  Linking,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -312,6 +313,45 @@ export default function SettingsScreen() {
             <Text style={styles.dangerText}>Delete Account & All Data</Text>
           )}
         </Pressable>
+      </View>
+
+      {/* Support Slipstream Section (Phase 17) */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Support Independent Development</Text>
+        <Text style={styles.supportDesc}>
+          Slipstream is crafted for drivers who care about pure telemetry without ads or track-day paywalls. Voluntary contributions keep our servers fast and map tiles loaded.
+        </Text>
+        <View style={styles.tipRow}>
+          <Pressable
+            style={({ pressed }) => [styles.tipBtn, pressed && styles.btnPressed]}
+            onPress={() =>
+              Linking.openURL('https://buy.stripe.com/slipstream-fuel-5').catch(() =>
+                Alert.alert('Unable to Open Link', 'Please try again later.')
+              )
+            }
+          >
+            <Text style={styles.tipBtnIcon}>☕</Text>
+            <Text style={styles.tipBtnTitle}>Fuel Developer</Text>
+            <Text style={styles.tipBtnAmount}>$5</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.tipBtn,
+              styles.tipBtnHighlight,
+              pressed && styles.btnPressed,
+            ]}
+            onPress={() =>
+              Linking.openURL('https://buy.stripe.com/slipstream-octane-15').catch(() =>
+                Alert.alert('Unable to Open Link', 'Please try again later.')
+              )
+            }
+          >
+            <Text style={styles.tipBtnIcon}>⚡</Text>
+            <Text style={styles.tipBtnTitle}>High Octane</Text>
+            <Text style={styles.tipBtnAmount}>$15</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Account Section */}
@@ -626,5 +666,45 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.label,
     color: Colors.textInverse,
+  },
+  supportDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.caption,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+    marginBottom: Spacing.md,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  tipBtn: {
+    flex: 1,
+    backgroundColor: Colors.bgSurface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+    gap: 4,
+  },
+  tipBtnHighlight: {
+    borderColor: Colors.accentCyan,
+    backgroundColor: Colors.accentCyanDim,
+  },
+  tipBtnIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  tipBtnTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.caption,
+    color: Colors.textPrimary,
+  },
+  tipBtnAmount: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.h2,
+    color: Colors.accentCyan,
   },
 });
