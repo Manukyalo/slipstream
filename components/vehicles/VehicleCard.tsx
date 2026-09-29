@@ -15,6 +15,7 @@ interface VehicleCardProps {
   onSetPrimary: (vehicleId: string) => void;
   onDelete: (vehicleId: string) => void;
   onPhotoPress?: (vehicleId: string) => void;
+  onMaintenancePress?: (vehicleId: string) => void;
 }
 
 export function VehicleCard({
@@ -22,6 +23,7 @@ export function VehicleCard({
   onSetPrimary,
   onDelete,
   onPhotoPress,
+  onMaintenancePress,
 }: VehicleCardProps) {
   const handleDelete = () => {
     Alert.alert(
@@ -98,13 +100,23 @@ export function VehicleCard({
           </View>
         )}
 
-        <Pressable
-          style={({ pressed }) => [styles.deleteBtn, pressed && styles.pressed]}
-          onPress={handleDelete}
-          hitSlop={8}
-        >
-          <Text style={styles.deleteBtnText}>Remove</Text>
-        </Pressable>
+        <View style={styles.rightActions}>
+          <Pressable
+            style={({ pressed }) => [styles.maintenanceBtn, pressed && styles.pressed]}
+            onPress={() => onMaintenancePress?.(vehicle.id)}
+            hitSlop={8}
+          >
+            <Text style={styles.maintenanceBtnText}>🔧 Service Log</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.deleteBtn, pressed && styles.pressed]}
+            onPress={handleDelete}
+            hitSlop={8}
+          >
+            <Text style={styles.deleteBtnText}>Remove</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -209,6 +221,24 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.borderSubtle,
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  maintenanceBtn: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.xs,
+    backgroundColor: Colors.bgElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  maintenanceBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.caption,
+    color: Colors.textSecondary,
   },
   primaryBtn: {
     paddingVertical: Spacing.xs,

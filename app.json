@@ -29,7 +29,8 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      "expo-sharing"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
@@ -52,7 +53,10 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Slipstream records your trip route and detects radar zones. Location runs in the background so recording continues when the screen is off.",
         "NSLocationWhenInUsePermission": "Slipstream uses your location to display your map position and record trips.",
         "NSLocationAlwaysUsageDescription": "Slipstream records your trip route in the background so you don't have to keep the screen on while driving.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {

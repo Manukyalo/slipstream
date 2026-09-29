@@ -111,6 +111,56 @@ export type Database = {
         }
         Relationships: []
       }
+      maintenance_logs: {
+        Row: {
+          cost: number
+          created_at: string
+          description: string
+          id: string
+          next_due_date: string | null
+          odometer: number
+          service_date: string
+          type: string
+          updated_at: string
+          user_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          cost?: number
+          created_at?: string
+          description: string
+          id?: string
+          next_due_date?: string | null
+          odometer: number
+          service_date: string
+          type: string
+          updated_at?: string
+          user_id: string
+          vehicle_id: string
+        }
+        Update: {
+          cost?: number
+          created_at?: string
+          description?: string
+          id?: string
+          next_due_date?: string | null
+          odometer?: number
+          service_date?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_logs_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -520,6 +570,10 @@ export type Database = {
           vehicle_year: number
           recorded_at: string
         }[]
+      }
+      get_vehicle_maintenance_summary: {
+        Args: { p_vehicle_id: string }
+        Returns: Json
       }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
@@ -1532,3 +1586,7 @@ export type HazardReport = Database['public']['Tables']['hazard_reports']['Row']
 export type HazardReportInsert = Database['public']['Tables']['hazard_reports']['Insert'];
 export type Referral = Database['public']['Tables']['referrals']['Row'];
 export type ReferralInsert = Database['public']['Tables']['referrals']['Insert'];
+export type MaintenanceLog = Database['public']['Tables']['maintenance_logs']['Row'];
+export type MaintenanceLogInsert = Database['public']['Tables']['maintenance_logs']['Insert'];
+export type MaintenanceLogUpdate = Database['public']['Tables']['maintenance_logs']['Update'];
+

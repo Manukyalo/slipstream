@@ -10,6 +10,8 @@ import { useHazardAlerts } from '@/hooks/useHazardAlerts';
 import { HazardAlertBanner } from '@/components/hazards/HazardAlertBanner';
 import { HazardReportModal } from '@/components/hazards/HazardReportModal';
 import { LocationConsentModal } from '@/components/compliance/LocationConsentModal';
+import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
+import { type GenerateRecapCardParams } from '@/services/shareCard';
 import { hasUserConsentedLocation, setUserLocationConsent } from '@/services/compliance';
 import { TripMetrics } from '@/utils/telemetry';
 
@@ -39,6 +41,7 @@ export default function TrackScreen() {
   const [reportModalVisible, setReportModalVisible] = useState<boolean>(false);
   const [consentModalVisible, setConsentModalVisible] = useState<boolean>(false);
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
+  const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -191,10 +194,29 @@ export default function TrackScreen() {
         {/* Saved trip confirmation banner */}
         {completedMetrics ? (
           <View style={styles.savedBanner}>
-            <Text style={styles.savedTitle}>TRIP SAVED TO CLOUD</Text>
-            <Text style={styles.savedMeta}>
-              {(completedMetrics.distanceMeters / 1000).toFixed(2)} km · Top {completedMetrics.topSpeedKmh} km/h · Avg {completedMetrics.avgSpeedKmh} km/h
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.savedTitle}>TRIP SAVED TO CLOUD</Text>
+              <Text style={styles.savedMeta}>
+                {(completedMetrics.distanceMeters / 1000).toFixed(2)} km · Top {completedMetrics.topSpeedKmh} km/h · Avg {completedMetrics.avgSpeedKmh} km/h
+              </Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.shareTripBtn, pressed && styles.btnPressed]}
+              onPress={() =>
+                setShareParams({
+                  type: 'trip',
+                  headline: 'SLIPSTREAM TELEMETRY RUN',
+                  topSpeedKmh: completedMetrics.topSpeedKmh,
+                  distanceMeters: completedMetrics.distanceMeters,
+                  durationSeconds: completedMetrics.durationSeconds,
+                  vehicleName: primaryVehicle
+                    ? `${primaryVehicle.year ?? ''} ${primaryVehicle.make} ${primaryVehicle.model}`.trim()
+                    : undefined,
+                })
+              }
+            >
+              <Text style={styles.shareTripBtnText}>📸 SHARE STORY</Text>
+            </Pressable>
           </View>
         ) : null}
 
@@ -223,6 +245,12 @@ export default function TrackScreen() {
         visible={consentModalVisible}
         onAccept={handleAcceptConsent}
         onDecline={handleDeclineConsent}
+      />
+
+      <ShareRecapModal
+        visible={!!shareParams}
+        params={shareParams}
+        onClose={() => setShareParams(null)}
       />
     </View>
   );
@@ -362,7 +390,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  shareTripBtn: {
+    backgroundColor: 'rgba(34, 197, 94, 0.25)',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.accentGreen,
+  },
+  shareTripBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 9,
+    color: Colors.accentGreen,
+    letterSpacing: 0.5,
   },
   savedTitle: {
     fontFamily: FontFamily.bold,

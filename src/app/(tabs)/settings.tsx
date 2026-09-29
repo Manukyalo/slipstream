@@ -19,6 +19,7 @@ import { useReferral } from '@/hooks/useReferral';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { VehicleCard } from '@/components/vehicles/VehicleCard';
 import { AddVehicleModal } from '@/components/vehicles/AddVehicleModal';
+import { MaintenanceLogScreen } from '@/components/maintenance/MaintenanceLogScreen';
 import { exportUserData, deleteUserAccount } from '@/services/compliance';
 import {
   isBiometricLockEnabled,
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
   } = useReferral();
 
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
+  const [maintenanceVehicle, setMaintenanceVehicle] = useState<{ id: string; name: string } | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState<boolean>(false);
   const [biometricSupported, setBiometricSupported] = useState<boolean>(false);
   const [exportingData, setExportingData] = useState<boolean>(false);
@@ -138,6 +140,13 @@ export default function SettingsScreen() {
       console.error('[Settings] Photo update failed:', err);
       Alert.alert('Upload Error', 'Could not upload vehicle photo.');
     }
+  };
+
+  const handleMaintenancePress = (vehicleId: string) => {
+    const vehicle = vehicles.find((v) => v.id === vehicleId);
+    if (!vehicle) return;
+    const name = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
+    setMaintenanceVehicle({ id: vehicleId, name });
   };
 
   return (
@@ -254,6 +263,7 @@ export default function SettingsScreen() {
                 onSetPrimary={setPrimary}
                 onDelete={removeVehicle}
                 onPhotoPress={handlePhotoPress}
+                onMaintenancePress={handleMaintenancePress}
               />
             ))}
           </View>
@@ -324,6 +334,15 @@ export default function SettingsScreen() {
         }}
         isFirstVehicle={vehicles.length === 0}
       />
+
+      {maintenanceVehicle && (
+        <MaintenanceLogScreen
+          visible={!!maintenanceVehicle}
+          vehicleId={maintenanceVehicle.id}
+          vehicleName={maintenanceVehicle.name}
+          onClose={() => setMaintenanceVehicle(null)}
+        />
+      )}
     </ScrollView>
   );
 }

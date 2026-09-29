@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
+import { View, Text, StyleSheet, FlatList, RefreshControl, Pressable } from 'react-native';
+import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
+import { type GenerateRecapCardParams } from '@/services/shareCard';
 import { supabase } from '@/lib/supabase';
 import { Trip } from '@/types/database';
 
@@ -9,6 +11,7 @@ export default function RecapScreen() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
   const fetchTrips = useCallback(async () => {
     try {
@@ -113,10 +116,32 @@ export default function RecapScreen() {
                   <Text style={styles.metricUnit}>AVG KM/H</Text>
                 </View>
               </View>
+
+              <Pressable
+                style={({ pressed }) => [styles.shareCardBtn, pressed && styles.btnPressed]}
+                onPress={() =>
+                  setShareParams({
+                    type: 'trip',
+                    id: item.id,
+                    headline: 'SLIPSTREAM TELEMETRY RUN',
+                    topSpeedKmh: Number(item.top_speed),
+                    distanceMeters: Number(item.distance_m),
+                    durationSeconds: item.duration_s,
+                  })
+                }
+              >
+                <Text style={styles.shareCardBtnText}>📸 SHARE STORY CARD</Text>
+              </Pressable>
             </View>
           )}
         />
       )}
+
+      <ShareRecapModal
+        visible={!!shareParams}
+        params={shareParams}
+        onClose={() => setShareParams(null)}
+      />
     </View>
   );
 }
@@ -224,5 +249,23 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: 1,
     marginTop: 2,
+  },
+  shareCardBtn: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.accentCyanDim,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.accentCyan,
+    alignItems: 'center',
+  },
+  shareCardBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.caption,
+    color: Colors.accentCyan,
+    letterSpacing: 0.5,
+  },
+  btnPressed: {
+    opacity: 0.8,
   },
 });
