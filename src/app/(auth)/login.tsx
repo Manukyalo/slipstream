@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   Pressable,
   StyleSheet,
@@ -80,6 +81,11 @@ export default function LoginScreen() {
     >
       <View style={styles.content}>
         <View style={styles.brand}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Slipstream</Text>
           <View style={styles.accentLine} />
           <Text style={styles.tagline}>High-Performance Telemetry & Navigation</Text>
@@ -198,6 +204,11 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: 'center',
     marginBottom: Spacing['2xl'],
+  },
+  logoImage: {
+    width: 96,
+    height: 96,
+    marginBottom: Spacing.sm,
   },
   title: {
     fontFamily: FontFamily.bold,
