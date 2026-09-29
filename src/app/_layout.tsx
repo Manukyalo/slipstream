@@ -97,7 +97,7 @@ function RootNavigation() {
 
     if (status === 'unauthenticated' && !inAuthGroup && !inInviteGroup) {
       router.replace('/(auth)/login');
-    } else if (status === 'authenticated' && inAuthGroup) {
+    } else if (status === 'authenticated' && (inAuthGroup || !segments[0])) {
       router.replace('/(tabs)/track');
     }
   }, [status, segments, fontsLoaded, router]);
