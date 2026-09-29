@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TrackingProvider } from '@/contexts/TrackingContext';
 import { SplashGate } from '@/components/ui/SplashGate';
 import { Colors } from '@/constants/design';
+import { setupAutoUpdateListener } from '@/services/updates';
 
 // Prevent native splash screen from autohiding before resources/session ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -35,6 +36,13 @@ function RootNavigation() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    const unsubscribeUpdates = setupAutoUpdateListener();
+    return () => {
+      unsubscribeUpdates();
+    };
+  }, []);
 
   useEffect(() => {
     if (status === 'loading' || !fontsLoaded) return;

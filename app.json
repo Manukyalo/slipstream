@@ -10,6 +10,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      "expo-updates",
       [
         "expo-splash-screen",
         {
@@ -30,6 +31,15 @@
       ],
       "@maplibre/maplibre-react-native"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/85ef135f-87ea-466c-b9f3-0abb2c3ab45c",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "extra": {
       "eas": {
         "projectId": "85ef135f-87ea-466c-b9f3-0abb2c3ab45c"
