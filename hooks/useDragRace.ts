@@ -6,16 +6,28 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/hooks/useVehicles';
 import {
   saveDragRun,
+  saveSprintRun,
   DRAG_DISTANCE_METERS,
+  SPRINT_TARGET_SPEED_KMH,
   type DragDistanceType,
+  type SprintType,
 } from '@/services/dragRuns';
 import { calculateDistanceMeters } from '@/utils/telemetry';
 
 export type DragRaceStatus = 'idle' | 'staging' | 'staged' | 'running' | 'finished';
+export type RaceTargetMode = 'all' | 'drag' | 'sprint_60' | 'sprint_100';
 
 export interface SplitResult {
   distanceType: DragDistanceType;
   distanceMeters: number;
+  elapsedMs: number;
+  trapSpeedKmh: number;
+  saved: boolean;
+}
+
+export interface SprintResult {
+  sprintType: SprintType;
+  targetSpeedKmh: number;
   elapsedMs: number;
   trapSpeedKmh: number;
   saved: boolean;
@@ -28,6 +40,9 @@ export interface UseDragRaceResult {
   distanceTraveledMeters: number;
   topSpeedKmh: number;
   splits: Record<DragDistanceType, SplitResult | null>;
+  sprints: Record<SprintType, SprintResult | null>;
+  mode: RaceTargetMode;
+  setMode: (mode: RaceTargetMode) => void;
   gForceMagnitude: number;
   stageVehicle: () => Promise<void>;
   abortRun: () => void;
@@ -42,6 +57,7 @@ export function useDragRace(): UseDragRaceResult {
   const { primaryVehicle } = useVehicles();
 
   const [status, setStatus] = useState<DragRaceStatus>('idle');
+  const [mode, setMode] = useState<RaceTargetMode>('all');
   const [elapsedMs, setElapsedMs] = useState<number>(0);
   const [currentSpeedKmh, setCurrentSpeedKmh] = useState<number>(0);
   const [distanceTraveledMeters, setDistanceTraveledMeters] = useState<number>(0);
@@ -54,9 +70,17 @@ export function useDragRace(): UseDragRaceResult {
     one_mile: null,
   });
 
+  const [sprints, setSprints] = useState<Record<SprintType, SprintResult | null>>({
+    zero_to_60: null,
+    zero_to_100: null,
+  });
+
   // Internal tracking refs
   const statusRef = useRef<DragRaceStatus>('idle');
   statusRef.current = status;
+
+  const modeRef = useRef<RaceTargetMode>('all');
+  modeRef.current = mode;
 
   const baselineGRef = useRef<number>(1.0);
   const accelSamplesRef = useRef<number[]>([]);
@@ -65,8 +89,11 @@ export function useDragRace(): UseDragRaceResult {
   const lastLocationRef = useRef<Location.LocationObjectCoords | null>(null);
   const cumulativeDistanceRef = useRef<number>(0);
   const topSpeedRef = useRef<number>(0);
+  const prevSpeedRef = useRef<number>(0);
+  const prevTimeRef = useRef<number>(0);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const splitsRecordedRef = useRef<Set<DragDistanceType>>(new Set());
+  const sprintsRecordedRef = useRef<Set<SprintType>>(new Set());
 
   // Cleanup on unmount
   useEffect(() => {
@@ -85,7 +112,10 @@ export function useDragRace(): UseDragRaceResult {
     startTimeRef.current = now;
     cumulativeDistanceRef.current = 0;
     topSpeedRef.current = 0;
+    prevSpeedRef.current = 0;
+    prevTimeRef.current = now;
     splitsRecordedRef.current.clear();
+    sprintsRecordedRef.current.clear();
 
     // High resolution display timer
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -176,7 +206,7 @@ export function useDragRace(): UseDragRaceResult {
               const now = Date.now();
               const elapsed = startTimeRef.current ? now - startTimeRef.current : 0;
 
-              // Check split thresholds
+              // Check split thresholds (distance)
               const checkSplit = (
                 type: DragDistanceType,
                 thresholdMeters: number,
@@ -216,8 +246,12 @@ export function useDragRace(): UseDragRaceResult {
                       });
                   }
 
-                  // If full mile reached, mark finished
-                  if (type === 'one_mile') {
+                  // If full mile reached (or drag mode 1/4 mile reached), mark finished
+                  const currentMode = modeRef.current;
+                  if (
+                    (currentMode === 'drag' && type === 'quarter_mile') ||
+                    (currentMode === 'all' && type === 'one_mile')
+                  ) {
                     setStatus('finished');
                     statusRef.current = 'finished';
                     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -228,6 +262,74 @@ export function useDragRace(): UseDragRaceResult {
               checkSplit('quarter_mile', DRAG_DISTANCE_METERS.quarter_mile);
               checkSplit('half_mile', DRAG_DISTANCE_METERS.half_mile);
               checkSplit('one_mile', DRAG_DISTANCE_METERS.one_mile);
+
+              // Check sprint thresholds (speed) with sub-tick interpolation
+              const checkSprint = (type: SprintType, targetSpeed: number) => {
+                if (
+                  speedKmh >= targetSpeed &&
+                  !sprintsRecordedRef.current.has(type)
+                ) {
+                  sprintsRecordedRef.current.add(type);
+
+                  const vCurr = speedKmh;
+                  const vPrev = prevSpeedRef.current;
+                  const tCurr = now;
+                  const tPrev = prevTimeRef.current;
+                  const tStart = startTimeRef.current ?? now;
+
+                  let sprintElapsed = elapsed;
+                  if (vCurr > vPrev && vPrev < targetSpeed && tPrev > tStart) {
+                    const fraction = (targetSpeed - vPrev) / (vCurr - vPrev);
+                    const interpolatedTime = tPrev + fraction * (tCurr - tPrev);
+                    sprintElapsed = Math.max(0, Math.round(interpolatedTime - tStart));
+                  }
+
+                  const sprintResult: SprintResult = {
+                    sprintType: type,
+                    targetSpeedKmh: targetSpeed,
+                    elapsedMs: sprintElapsed,
+                    trapSpeedKmh: vCurr,
+                    saved: false,
+                  };
+
+                  setSprints((prev) => ({ ...prev, [type]: sprintResult }));
+
+                  if (user) {
+                    saveSprintRun({
+                      userId: user.id,
+                      vehicleId: primaryVehicle?.id ?? null,
+                      sprintType: type,
+                      elapsedMs: sprintElapsed,
+                      topSpeed: vCurr,
+                    })
+                      .then(() => {
+                        setSprints((prev) => ({
+                          ...prev,
+                          [type]: { ...sprintResult, saved: true },
+                        }));
+                      })
+                      .catch((err) => {
+                        console.error(`[useDragRace] Failed to save sprint ${type}:`, err);
+                      });
+                  }
+
+                  const currentMode = modeRef.current;
+                  if (
+                    (currentMode === 'sprint_60' && type === 'zero_to_60') ||
+                    (currentMode === 'sprint_100' && type === 'zero_to_100')
+                  ) {
+                    setStatus('finished');
+                    statusRef.current = 'finished';
+                    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                  }
+                }
+              };
+
+              checkSprint('zero_to_60', SPRINT_TARGET_SPEED_KMH.zero_to_60);
+              checkSprint('zero_to_100', SPRINT_TARGET_SPEED_KMH.zero_to_100);
+
+              prevSpeedRef.current = speedKmh;
+              prevTimeRef.current = now;
             }
             lastLocationRef.current = loc.coords;
           } else {
@@ -252,6 +354,7 @@ export function useDragRace(): UseDragRaceResult {
     accelSamplesRef.current = [];
     cumulativeDistanceRef.current = 0;
     topSpeedRef.current = 0;
+    prevSpeedRef.current = 0;
     setElapsedMs(0);
     setDistanceTraveledMeters(0);
     setTopSpeedKmh(0);
@@ -260,6 +363,12 @@ export function useDragRace(): UseDragRaceResult {
       half_mile: null,
       one_mile: null,
     });
+    setSprints({
+      zero_to_60: null,
+      zero_to_100: null,
+    });
+    sprintsRecordedRef.current.clear();
+    splitsRecordedRef.current.clear();
     setStatus('staging');
     statusRef.current = 'staging';
   }, []);
@@ -283,11 +392,18 @@ export function useDragRace(): UseDragRaceResult {
     setElapsedMs(0);
     setDistanceTraveledMeters(0);
     setTopSpeedKmh(0);
+    prevSpeedRef.current = 0;
     setSplits({
       quarter_mile: null,
       half_mile: null,
       one_mile: null,
     });
+    setSprints({
+      zero_to_60: null,
+      zero_to_100: null,
+    });
+    sprintsRecordedRef.current.clear();
+    splitsRecordedRef.current.clear();
   }, []);
 
   return {
@@ -297,6 +413,9 @@ export function useDragRace(): UseDragRaceResult {
     distanceTraveledMeters,
     topSpeedKmh,
     splits,
+    sprints,
+    mode,
+    setMode,
     gForceMagnitude,
     stageVehicle,
     abortRun,

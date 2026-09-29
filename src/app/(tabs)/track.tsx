@@ -9,6 +9,8 @@ import { useVehicles } from '@/hooks/useVehicles';
 import { useHazardAlerts } from '@/hooks/useHazardAlerts';
 import { HazardAlertBanner } from '@/components/hazards/HazardAlertBanner';
 import { HazardReportModal } from '@/components/hazards/HazardReportModal';
+import { LocationConsentModal } from '@/components/compliance/LocationConsentModal';
+import { hasUserConsentedLocation, setUserLocationConsent } from '@/services/compliance';
 import { TripMetrics } from '@/utils/telemetry';
 
 export default function TrackScreen() {
@@ -35,6 +37,7 @@ export default function TrackScreen() {
     reportPin,
   } = useHazardAlerts({ currentCoords, isTracking });
   const [reportModalVisible, setReportModalVisible] = useState<boolean>(false);
+  const [consentModalVisible, setConsentModalVisible] = useState<boolean>(false);
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
 
   const formatDuration = (seconds: number) => {
@@ -43,7 +46,7 @@ export default function TrackScreen() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleStartStop = async () => {
+  const proceedWithTracking = async () => {
     if (!permissionGranted) {
       const ok = await requestPermissions();
       if (!ok) {
@@ -51,16 +54,36 @@ export default function TrackScreen() {
         return;
       }
     }
+    setCompletedMetrics(null);
+    await startTracking();
+  };
 
+  const handleStartStop = async () => {
     if (isTracking) {
       const summary = await stopTracking();
       if (summary) {
         setCompletedMetrics(summary);
       }
-    } else {
-      setCompletedMetrics(null);
-      await startTracking();
+      return;
     }
+
+    const hasConsented = await hasUserConsentedLocation();
+    if (!hasConsented) {
+      setConsentModalVisible(true);
+      return;
+    }
+
+    await proceedWithTracking();
+  };
+
+  const handleAcceptConsent = async () => {
+    await setUserLocationConsent(true);
+    setConsentModalVisible(false);
+    await proceedWithTracking();
+  };
+
+  const handleDeclineConsent = () => {
+    setConsentModalVisible(false);
   };
 
   const handleOfflineDownload = () => {
@@ -194,6 +217,12 @@ export default function TrackScreen() {
         visible={reportModalVisible}
         onClose={() => setReportModalVisible(false)}
         onReport={reportPin}
+      />
+
+      <LocationConsentModal
+        visible={consentModalVisible}
+        onAccept={handleAcceptConsent}
+        onDecline={handleDeclineConsent}
       />
     </View>
   );

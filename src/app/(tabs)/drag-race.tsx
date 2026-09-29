@@ -11,6 +11,7 @@ import { useVehicles } from '@/hooks/useVehicles';
 import { useDragRace } from '@/hooks/useDragRace';
 import { ChristmasTree } from '@/components/drag/ChristmasTree';
 import { SplitTimeCard } from '@/components/drag/SplitTimeCard';
+import { SprintTimeCard } from '@/components/drag/SprintTimeCard';
 import { DRAG_DISTANCE_METERS } from '@/services/dragRuns';
 
 export default function DragRaceScreen() {
@@ -22,6 +23,9 @@ export default function DragRaceScreen() {
     distanceTraveledMeters,
     topSpeedKmh,
     splits,
+    sprints,
+    mode,
+    setMode,
     gForceMagnitude,
     stageVehicle,
     abortRun,
@@ -56,6 +60,32 @@ export default function DragRaceScreen() {
             <Text style={styles.noVehicleText}>🏎️ Garage: No car set</Text>
           </View>
         )}
+      </View>
+
+      {/* Target Mode Selector Pills */}
+      <View style={styles.modeSelector}>
+        {(
+          [
+            { id: 'all', label: 'ALL BENCHMARKS' },
+            { id: 'sprint_60', label: '0–60 MPH' },
+            { id: 'sprint_100', label: '0–100 KM/H' },
+            { id: 'drag', label: '1/4 MILE' },
+          ] as const
+        ).map((item) => {
+          const isActive = mode === item.id;
+          return (
+            <Pressable
+              key={item.id}
+              style={[styles.modePill, isActive && styles.modePillActive]}
+              onPress={() => setMode(item.id)}
+              disabled={status === 'running' || status === 'staging'}
+            >
+              <Text style={[styles.modePillText, isActive && styles.modePillTextActive]}>
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {/* Mandatory Accuracy Disclaimer */}
@@ -189,28 +219,51 @@ export default function DragRaceScreen() {
         )}
       </View>
 
-      {/* Split Cards */}
-      <View style={styles.splitsSection}>
-        <Text style={styles.splitsSectionTitle}>TIMED DISTANCE SPLITS</Text>
+      {/* Acceleration Benchmarks (0-60 / 0-100) */}
+      {(mode === 'all' || mode === 'sprint_60' || mode === 'sprint_100') && (
+        <View style={styles.splitsSection}>
+          <Text style={styles.sprintsSectionTitle}>ACCELERATION BENCHMARKS</Text>
 
-        <SplitTimeCard
-          distanceType="quarter_mile"
-          split={splits.quarter_mile}
-          targetMeters={Math.round(DRAG_DISTANCE_METERS.quarter_mile)}
-        />
+          {(mode === 'all' || mode === 'sprint_60') && (
+            <SprintTimeCard
+              sprintType="zero_to_60"
+              sprint={sprints.zero_to_60}
+            />
+          )}
 
-        <SplitTimeCard
-          distanceType="half_mile"
-          split={splits.half_mile}
-          targetMeters={Math.round(DRAG_DISTANCE_METERS.half_mile)}
-        />
+          {(mode === 'all' || mode === 'sprint_100') && (
+            <SprintTimeCard
+              sprintType="zero_to_100"
+              sprint={sprints.zero_to_100}
+            />
+          )}
+        </View>
+      )}
 
-        <SplitTimeCard
-          distanceType="one_mile"
-          split={splits.one_mile}
-          targetMeters={Math.round(DRAG_DISTANCE_METERS.one_mile)}
-        />
-      </View>
+      {/* Timed Distance Splits (1/4, 1/2, 1 Mile) */}
+      {(mode === 'all' || mode === 'drag') && (
+        <View style={styles.splitsSection}>
+          <Text style={styles.splitsSectionTitle}>TIMED DISTANCE SPLITS</Text>
+
+          <SplitTimeCard
+            distanceType="quarter_mile"
+            split={splits.quarter_mile}
+            targetMeters={Math.round(DRAG_DISTANCE_METERS.quarter_mile)}
+          />
+
+          <SplitTimeCard
+            distanceType="half_mile"
+            split={splits.half_mile}
+            targetMeters={Math.round(DRAG_DISTANCE_METERS.half_mile)}
+          />
+
+          <SplitTimeCard
+            distanceType="one_mile"
+            split={splits.one_mile}
+            targetMeters={Math.round(DRAG_DISTANCE_METERS.one_mile)}
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -493,6 +546,42 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     letterSpacing: 1,
     marginBottom: Spacing.sm,
+  },
+  sprintsSectionTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.label,
+    color: Colors.accentOrange,
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  modePill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.bgElevated,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modePillActive: {
+    backgroundColor: Colors.accentOrangeDim,
+    borderColor: Colors.accentOrange,
+  },
+  modePillText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    color: Colors.textSecondary,
+    letterSpacing: 0.5,
+  },
+  modePillTextActive: {
+    color: Colors.accentOrange,
+    fontFamily: FontFamily.bold,
   },
   pressed: {
     opacity: 0.8,

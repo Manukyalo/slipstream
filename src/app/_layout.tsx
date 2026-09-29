@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,6 +13,8 @@ import {
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TrackingProvider } from '@/contexts/TrackingContext';
 import { SplashGate } from '@/components/ui/SplashGate';
+import { BiometricLockScreen } from '@/components/security/BiometricLockScreen';
+import { isBiometricLockEnabled, authenticateWithBiometrics } from '@/services/biometrics';
 import { Colors } from '@/constants/design';
 import { setupAutoUpdateListener } from '@/services/updates';
 
@@ -31,6 +33,9 @@ function RootNavigation() {
     SpaceGrotesk_700Bold,
   });
 
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [checkingLock, setCheckingLock] = useState<boolean>(true);
+
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreen.hideAsync().catch(() => {});
@@ -43,6 +48,37 @@ function RootNavigation() {
       unsubscribeUpdates();
     };
   }, []);
+
+  // Biometric app lock check on app start
+  useEffect(() => {
+    async function checkAppLock() {
+      if (status !== 'authenticated') {
+        setIsLocked(false);
+        setCheckingLock(false);
+        return;
+      }
+
+      const enabled = await isBiometricLockEnabled();
+      if (!enabled) {
+        setIsLocked(false);
+        setCheckingLock(false);
+        return;
+      }
+
+      setIsLocked(true);
+      setCheckingLock(false);
+
+      // Prompt immediately on foreground
+      const authenticated = await authenticateWithBiometrics('Unlock Slipstream');
+      if (authenticated) {
+        setIsLocked(false);
+      }
+    }
+
+    if (status !== 'loading') {
+      checkAppLock();
+    }
+  }, [status]);
 
   useEffect(() => {
     if (status === 'loading' || !fontsLoaded) return;
@@ -57,8 +93,17 @@ function RootNavigation() {
     }
   }, [status, segments, fontsLoaded, router]);
 
-  if (!fontsLoaded || status === 'loading') {
+  if (!fontsLoaded || status === 'loading' || checkingLock) {
     return <SplashGate />;
+  }
+
+  if (isLocked && status === 'authenticated') {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <BiometricLockScreen onUnlock={() => setIsLocked(false)} />
+      </View>
+    );
   }
 
   return (

@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
+  ActivityIndicator,
   Text,
   View,
+  Share,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -16,6 +19,13 @@ import { useReferral } from '@/hooks/useReferral';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { VehicleCard } from '@/components/vehicles/VehicleCard';
 import { AddVehicleModal } from '@/components/vehicles/AddVehicleModal';
+import { exportUserData, deleteUserAccount } from '@/services/compliance';
+import {
+  isBiometricLockEnabled,
+  setBiometricLockEnabled,
+  checkBiometricCapabilities,
+  authenticateWithBiometrics,
+} from '@/services/biometrics';
 
 export default function SettingsScreen() {
   const { user, profile, signOut } = useAuth();
@@ -35,6 +45,73 @@ export default function SettingsScreen() {
   } = useReferral();
 
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
+  const [biometricEnabled, setBiometricEnabled] = useState<boolean>(false);
+  const [biometricSupported, setBiometricSupported] = useState<boolean>(false);
+  const [exportingData, setExportingData] = useState<boolean>(false);
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+
+  useEffect(() => {
+    async function loadSecuritySettings() {
+      const caps = await checkBiometricCapabilities();
+      setBiometricSupported(caps.hasHardware && caps.isEnrolled);
+      const enabled = await isBiometricLockEnabled();
+      setBiometricEnabled(enabled);
+    }
+    loadSecuritySettings();
+  }, []);
+
+  const handleToggleBiometric = async (value: boolean) => {
+    if (value) {
+      const success = await authenticateWithBiometrics('Confirm identity to enable biometric lock');
+      if (!success) return;
+    }
+    const saved = await setBiometricLockEnabled(value);
+    if (saved) setBiometricEnabled(value);
+  };
+
+  const handleExportData = async () => {
+    setExportingData(true);
+    try {
+      const { data, error } = await exportUserData();
+      if (error || !data) {
+        Alert.alert('Export Failed', error ?? 'Unable to export your data. Please try again.');
+        return;
+      }
+      await Share.share({
+        title: 'Slipstream Data Export',
+        message: JSON.stringify(data, null, 2),
+      });
+    } catch {
+      Alert.alert('Export Failed', 'An unexpected error occurred.');
+    } finally {
+      setExportingData(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account, all trip telemetry, vehicles, and performance records. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              const { success, error } = await deleteUserAccount();
+              if (!success) {
+                Alert.alert('Deletion Failed', error ?? 'Unable to delete account. Please contact support.');
+              }
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const handlePhotoPress = async (vehicleId: string) => {
     try {
@@ -181,6 +258,50 @@ export default function SettingsScreen() {
             ))}
           </View>
         )}
+      </View>
+
+      {/* Privacy & Security Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Privacy & Security</Text>
+
+        {biometricSupported && (
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Biometric App Lock</Text>
+              <Text style={styles.settingDesc}>Require Face ID / fingerprint to open Slipstream</Text>
+            </View>
+            <Switch
+              value={biometricEnabled}
+              onValueChange={handleToggleBiometric}
+              trackColor={{ false: Colors.bgElevated, true: Colors.accentCyanDim }}
+              thumbColor={biometricEnabled ? Colors.accentCyan : Colors.textMuted}
+            />
+          </View>
+        )}
+
+        <Pressable
+          style={({ pressed }) => [styles.settingActionBtn, pressed && styles.btnPressed]}
+          onPress={handleExportData}
+          disabled={exportingData}
+        >
+          {exportingData ? (
+            <ActivityIndicator size="small" color={Colors.accentCyan} />
+          ) : (
+            <Text style={styles.settingActionText}>Export My Data (GDPR)</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.dangerBtn, pressed && styles.btnPressed]}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+        >
+          {deletingAccount ? (
+            <ActivityIndicator size="small" color={Colors.accentRed} />
+          ) : (
+            <Text style={styles.dangerText}>Delete Account & All Data</Text>
+          )}
+        </Pressable>
       </View>
 
       {/* Account Section */}
@@ -349,6 +470,57 @@ const styles = StyleSheet.create({
   },
   vehicleList: {
     gap: Spacing.xs,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: Spacing.sm,
+  },
+  settingInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  settingLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.body,
+    color: Colors.textPrimary,
+  },
+  settingDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.caption,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  settingActionBtn: {
+    backgroundColor: Colors.bgElevated,
+    borderWidth: 1,
+    borderColor: Colors.accentCyan,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  settingActionText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.accentCyan,
+  },
+  dangerBtn: {
+    backgroundColor: Colors.accentRedDim,
+    borderColor: Colors.accentRed,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  dangerText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.accentRed,
   },
   signOutBtn: {
     backgroundColor: Colors.accentRedDim,

@@ -20,6 +20,7 @@ export type Database = {
           elapsed_ms: number
           id: string
           recorded_at: string
+          run_type?: string
           top_speed: number
           user_id: string
           vehicle_id: string | null
@@ -29,6 +30,7 @@ export type Database = {
           elapsed_ms: number
           id?: string
           recorded_at?: string
+          run_type?: string
           top_speed?: number
           user_id: string
           vehicle_id?: string | null
@@ -38,6 +40,7 @@ export type Database = {
           elapsed_ms?: number
           id?: string
           recorded_at?: string
+          run_type?: string
           top_speed?: number
           user_id?: string
           vehicle_id?: string | null
@@ -495,6 +498,29 @@ export type Database = {
         Returns: Json
       }
       confirm_hazard: { Args: { target_hazard_id: string }; Returns: number }
+      delete_user_account: { Args: Record<string, never>; Returns: boolean }
+      export_user_data: { Args: Record<string, never>; Returns: Json }
+      purge_old_speed_samples: { Args: { p_days_old?: number }; Returns: number }
+      get_sprint_leaderboard: {
+        Args: {
+          sprint_type?: string
+          scope_type?: string
+          filter_make?: string | null
+          filter_model?: string | null
+          limit_count?: number
+        }
+        Returns: {
+          rank: number
+          user_id: string
+          display_name: string
+          elapsed_ms: number
+          top_speed: number
+          vehicle_make: string
+          vehicle_model: string
+          vehicle_year: number
+          recorded_at: string
+        }[]
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
