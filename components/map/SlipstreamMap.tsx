@@ -9,10 +9,10 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { Colors } from '@/constants/design';
 
-const MAPTILER_KEY = process.env.EXPO_PUBLIC_MAPTILER_KEY ?? '';
-export const DEFAULT_DARK_STYLE_URL = MAPTILER_KEY
-  ? `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${MAPTILER_KEY}`
-  : 'https://demotiles.maplibre.org/style.json';
+// OpenFreeMap: Free, open-source vector tile service based on OpenStreetMap & MapLibre (no API key required)
+export const OPENFREEMAP_DARK_STYLE_URL = 'https://tiles.openfreemap.org/styles/dark';
+export const OPENFREEMAP_LIBERTY_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+export const DEFAULT_DARK_STYLE_URL = OPENFREEMAP_DARK_STYLE_URL;
 
 interface MapViewProps {
   styleUrl?: string;
