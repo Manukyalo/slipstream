@@ -8,9 +8,6 @@ export default function Index() {
     return null;
   }
 
-  if (status === 'authenticated') {
-    return <Redirect href="/(tabs)/track" />;
-  }
-
-  return <Redirect href="/(auth)/login" />;
+  // Directly land on the feature tabs (Track screen) regardless of auth status
+  return <Redirect href="/(tabs)/track" />;
 }

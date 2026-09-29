@@ -7,6 +7,7 @@ import {
   Switch,
   ActivityIndicator,
   Text,
+  TextInput,
   View,
   Share,
   Linking,
@@ -30,7 +31,7 @@ import {
 } from '@/services/biometrics';
 
 export default function SettingsScreen() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, signInWithGoogle, signInWithEmail, signUpWithEmail, status } = useAuth();
   const {
     vehicles,
     isLoading: isLoadingGarage,
@@ -52,6 +53,12 @@ export default function SettingsScreen() {
   const [biometricSupported, setBiometricSupported] = useState<boolean>(false);
   const [exportingData, setExportingData] = useState<boolean>(false);
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
+  const [emailExpanded, setEmailExpanded] = useState<boolean>(false);
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
 
   useEffect(() => {
     async function loadSecuritySettings() {
@@ -149,6 +156,144 @@ export default function SettingsScreen() {
     const name = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ');
     setMaintenanceVehicle({ id: vehicleId, name });
   };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    const error = await signInWithGoogle();
+    setGoogleLoading(false);
+    if (error) {
+      Alert.alert('Google Sign-In Failed', error.message ?? 'Please try again.');
+    }
+  };
+
+  const handleEmailAuth = async () => {
+    if (!emailInput.trim() || !passwordInput.trim()) {
+      Alert.alert('Required', 'Please enter your email and password.');
+      return;
+    }
+    setAuthLoading(true);
+    const fn = authMode === 'login' ? signInWithEmail : signUpWithEmail;
+    const error = await fn(emailInput.trim(), passwordInput.trim());
+    setAuthLoading(false);
+    if (error) Alert.alert(authMode === 'login' ? 'Sign In Failed' : 'Sign Up Failed', error.message);
+  };
+
+  // ── Unauthenticated screen ─────────────────────────────────────────────────
+  if (status !== 'authenticated') {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.subtitle}>Sign in to unlock all features</Text>
+        </View>
+
+        {/* Google Sign-In */}
+        <View style={styles.authCard}>
+          <Text style={styles.authCardTitle}>Join the Grid 🏁</Text>
+          <Text style={styles.authCardSub}>
+            Sign in to record trips, build your garage, join drag-race leaderboards, and save your
+            performance history across devices.
+          </Text>
+
+          <Pressable
+            style={({ pressed }) => [styles.googleBtn, pressed && styles.btnPressed, googleLoading && styles.btnDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#1a1a1a" />
+            ) : (
+              <>
+                <Text style={styles.googleBtnIcon}>G</Text>
+                <Text style={styles.googleBtnText}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Pressable
+            style={styles.emailToggleBtn}
+            onPress={() => setEmailExpanded((v) => !v)}
+          >
+            <Text style={styles.emailToggleBtnText}>
+              {emailExpanded ? 'Hide Email Login' : 'Continue with Email'}
+            </Text>
+          </Pressable>
+
+          {emailExpanded && (
+            <View style={styles.emailForm}>
+              <View style={styles.authModeRow}>
+                <Pressable
+                  style={[styles.authModeTab, authMode === 'login' && styles.authModeTabActive]}
+                  onPress={() => setAuthMode('login')}
+                >
+                  <Text style={[styles.authModeTabText, authMode === 'login' && styles.authModeTabTextActive]}>Sign In</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.authModeTab, authMode === 'signup' && styles.authModeTabActive]}
+                  onPress={() => setAuthMode('signup')}
+                >
+                  <Text style={[styles.authModeTabText, authMode === 'signup' && styles.authModeTabTextActive]}>Sign Up</Text>
+                </Pressable>
+              </View>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={Colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={emailInput}
+                onChangeText={setEmailInput}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={Colors.textMuted}
+                secureTextEntry
+                value={passwordInput}
+                onChangeText={setPasswordInput}
+              />
+
+              <Pressable
+                style={({ pressed }) => [styles.submitBtn, pressed && styles.btnPressed, authLoading && styles.btnDisabled]}
+                onPress={handleEmailAuth}
+                disabled={authLoading}
+              >
+                {authLoading ? (
+                  <ActivityIndicator color={Colors.bgBase} />
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* Rankings preview teaser */}
+        <View style={styles.featureTeaser}>
+          <Text style={styles.featureTeaserTitle}>What you unlock</Text>
+          {[
+            '🚗  Live trip tracking & route replay',
+            '⚡  Drag race 0–60 / ¼ mile timing',
+            '🏁  Circuit lap timing with sector splits',
+            '🏆  Global & same-car leaderboards',
+            '🛣️  Discover & save twisty roads',
+            '🔧  Vehicle maintenance logbook',
+          ].map((f) => (
+            <Text key={f} style={styles.featureTeaserItem}>{f}</Text>
+          ))}
+        </View>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -706,5 +851,153 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: FontSize.h2,
     color: Colors.accentCyan,
+  },
+
+  // ── Auth screen styles ─────────────────────────────────────────────────────
+  authCard: {
+    backgroundColor: Colors.bgSurface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    marginBottom: Spacing.lg,
+  },
+  authCardTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.h2,
+    color: Colors.textPrimary,
+    marginBottom: Spacing.sm,
+  },
+  authCardSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.body,
+    color: Colors.textMuted,
+    lineHeight: 22,
+    marginBottom: Spacing.xl,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: Radius.lg,
+    paddingVertical: 14,
+    paddingHorizontal: Spacing.lg,
+    gap: 10,
+    marginBottom: Spacing.md,
+  },
+  googleBtnIcon: {
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
+    color: '#1a1a1a',
+  },
+  googleBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: '#1a1a1a',
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    marginVertical: Spacing.md,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.caption,
+    color: Colors.textMuted,
+  },
+  emailToggleBtn: {
+    borderWidth: 1,
+    borderColor: Colors.accentCyan,
+    borderRadius: Radius.lg,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  emailToggleBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.accentCyan,
+  },
+  emailForm: {
+    marginTop: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  authModeRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.bgBase,
+    borderRadius: Radius.md,
+    padding: 4,
+    marginBottom: Spacing.sm,
+  },
+  authModeTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: Radius.sm,
+  },
+  authModeTabActive: {
+    backgroundColor: Colors.accentCyan,
+  },
+  authModeTabText: {
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.body,
+    color: Colors.textMuted,
+  },
+  authModeTabTextActive: {
+    color: Colors.bgBase,
+  },
+  input: {
+    backgroundColor: Colors.bgBase,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.body,
+    color: Colors.textPrimary,
+  },
+  submitBtn: {
+    backgroundColor: Colors.accentCyan,
+    borderRadius: Radius.lg,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  submitBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.bgBase,
+  },
+  featureTeaser: {
+    backgroundColor: Colors.bgSurface,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  featureTeaserTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.label,
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: Spacing.xs,
+  },
+  featureTeaserItem: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.body,
+    color: Colors.textPrimary,
+    lineHeight: 24,
   },
 });

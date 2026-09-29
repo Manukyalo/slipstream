@@ -93,11 +93,10 @@ function RootNavigation() {
     if (status === 'loading' || !fontsLoaded) return;
 
     const inAuthGroup = segments[0] === '(auth)';
-    const inInviteGroup = segments[0] === 'i';
 
-    if (status === 'unauthenticated' && !inAuthGroup && !inInviteGroup) {
-      router.replace('/(auth)/login');
-    } else if (status === 'authenticated' && (inAuthGroup || !segments[0])) {
+    // Only push authenticated users out of the login/signup screens
+    // Unauthenticated users can freely use the app; auth is in Settings tab
+    if (status === 'authenticated' && (inAuthGroup || !segments[0])) {
       router.replace('/(tabs)/track');
     }
   }, [status, segments, fontsLoaded, router]);

@@ -6,9 +6,13 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import type { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Profile } from '@/types/database';
+
+WebBrowser.maybeCompleteAuthSession();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +25,8 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /** Sign in with Google via OAuth browser session */
+  signInWithGoogle: () => Promise<AuthError | null>;
   /** Sign in with email + password */
   signInWithEmail: (email: string, password: string) => Promise<AuthError | null>;
   /** Sign up with email + password, with optional referral attribution code */
@@ -115,6 +121,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Auth actions
   // ---------------------------------------------------------------------------
 
+  const signInWithGoogle = useCallback(async (): Promise<AuthError | null> => {
+    try {
+      const redirectUrl = Linking.createURL('auth/callback');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) return error;
+      if (!data?.url) return null;
+
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (res.type === 'success' && res.url) {
+        const parsed = Linking.parse(res.url);
+        if (parsed.queryParams?.code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+            String(parsed.queryParams.code),
+          );
+          return exchangeError;
+        }
+
+        // Handle fragment tokens (#access_token=...&refresh_token=...)
+        if (res.url.includes('#access_token=') || res.url.includes('?access_token=')) {
+          const fragment = res.url.split('#')[1] || res.url.split('?')[1];
+          const params = new URLSearchParams(fragment);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          if (accessToken && refreshToken) {
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            return sessionError;
+          }
+        }
+      }
+      return null;
+    } catch (err: unknown) {
+      return err as AuthError;
+    }
+  }, []);
+
   const signInWithEmail = useCallback(
     async (email: string, password: string): Promise<AuthError | null> => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -143,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user: session?.user ?? null,
         profile,
+        signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,
