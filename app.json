@@ -49,7 +49,8 @@
       "package": "com.slipstream.app",
       "adaptiveIcon": {
         "backgroundColor": "#080B14",
-        "foregroundImage": "./assets/adaptive-icon.png"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
