@@ -177,7 +177,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUpWithEmail = useCallback(
     async (email: string, password: string, referralCode?: string): Promise<AuthError | null> => {
-      const options = referralCode ? { data: { referral_code: referralCode } } : undefined;
+      const redirectUrl = Linking.createURL('auth/callback');
+      const options: { emailRedirectTo: string; data?: { referral_code: string } } = {
+        emailRedirectTo: redirectUrl,
+        ...(referralCode ? { data: { referral_code: referralCode } } : {}),
+      };
       const { error } = await supabase.auth.signUp({ email, password, options });
       return error;
     },
