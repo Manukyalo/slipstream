@@ -22,9 +22,10 @@ import { SplashGate } from '@/components/ui/SplashGate';
 import { BiometricLockScreen } from '@/components/security/BiometricLockScreen';
 import { isBiometricLockEnabled, authenticateWithBiometrics } from '@/services/biometrics';
 import { Colors } from '@/constants/design';
-import { setupAutoUpdateListener } from '@/services/updates';
 import { startOfflineSync, stopOfflineSync } from '@/services/offlineQueue';
 import { OfflineSyncBanner } from '@/components/ui/OfflineSyncBanner';
+import { useOtaUpdates } from '@/lib/updates';
+import { OtaUpdateBanner } from '@/components/ui/OtaUpdateBanner';
 
 // Prevent native splash screen from autohiding before resources/session ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -33,6 +34,7 @@ function RootNavigation() {
   const { status } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const { isUpdateReady, applyUpdateNow } = useOtaUpdates();
 
   const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_400Regular,
@@ -53,13 +55,6 @@ function RootNavigation() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
-
-  useEffect(() => {
-    const unsubscribeUpdates = setupAutoUpdateListener();
-    return () => {
-      unsubscribeUpdates();
-    };
-  }, []);
 
   useEffect(() => {
     startOfflineSync();
@@ -127,6 +122,7 @@ function RootNavigation() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      {isUpdateReady && <OtaUpdateBanner onRestart={applyUpdateNow} />}
       <OfflineSyncBanner />
       <Slot />
     </View>

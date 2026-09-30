@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useReferral } from '@/hooks/useReferral';
@@ -29,6 +30,7 @@ import {
   checkBiometricCapabilities,
   authenticateWithBiometrics,
 } from '@/services/biometrics';
+import { useOtaUpdates } from '@/lib/updates';
 
 export default function SettingsScreen() {
   const { user, profile, signOut, signInWithGoogle, signInWithEmail, signUpWithEmail, status } = useAuth();
@@ -59,6 +61,8 @@ export default function SettingsScreen() {
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
+  const { diagnostics, checkForUpdate, isChecking } = useOtaUpdates();
 
   useEffect(() => {
     async function loadSecuritySettings() {
@@ -508,6 +512,81 @@ export default function SettingsScreen() {
         >
           <Text style={styles.signOutText}>Sign Out</Text>
         </Pressable>
+      </View>
+
+      {/* Version & On-Device Diagnostics */}
+      <View style={styles.versionContainer}>
+        <Pressable
+          onLongPress={() => setShowDiagnostics((prev) => !prev)}
+          delayLongPress={600}
+        >
+          <Text style={styles.versionText}>Slipstream v1.0.0 (Build 1)</Text>
+          <Text style={styles.versionSubtext}>Hold for OTA Diagnostics</Text>
+        </Pressable>
+
+        {showDiagnostics && (
+          <View style={styles.diagCard}>
+            <View style={styles.diagHeader}>
+              <Text style={styles.diagTitle}>EAS Update Diagnostics</Text>
+              <Pressable
+                style={({ pressed }) => [styles.diagCheckBtn, pressed && styles.btnPressed]}
+                onPress={checkForUpdate}
+                disabled={isChecking}
+              >
+                <Text style={styles.diagCheckBtnText}>
+                  {isChecking ? 'Checking...' : 'Check now'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Channel</Text>
+              <Text style={styles.diagValue}>{diagnostics.channel ?? 'None'}</Text>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Runtime</Text>
+              <Text style={styles.diagValue}>{diagnostics.runtimeVersion ?? 'None'}</Text>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Update ID</Text>
+              <Text style={styles.diagValue} numberOfLines={1}>
+                {diagnostics.updateId ?? 'Embedded (initial build)'}
+              </Text>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Embedded launch</Text>
+              <Text style={styles.diagValue}>{diagnostics.isEmbeddedLaunch ? 'Yes' : 'No'}</Text>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Updates enabled</Text>
+              <Text style={styles.diagValue}>{diagnostics.isEnabled ? 'Yes' : 'No'}</Text>
+            </View>
+
+            <View style={styles.diagRow}>
+              <Text style={styles.diagLabel}>Last status</Text>
+              <Text
+                style={[
+                  styles.diagValue,
+                  diagnostics.lastStatus === 'ready' && { color: Theme.colors.signalCyan },
+                  diagnostics.lastStatus === 'error' && { color: Theme.colors.flagRed },
+                ]}
+              >
+                {diagnostics.lastStatus}
+                {diagnostics.lastCheckTime ? ` (${diagnostics.lastCheckTime})` : ''}
+              </Text>
+            </View>
+
+            {diagnostics.lastError && (
+              <View style={styles.diagErrorRow}>
+                <Text style={styles.diagErrorText}>Error: {diagnostics.lastError}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Add Vehicle Modal */}
@@ -999,5 +1078,91 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     color: Colors.textPrimary,
     lineHeight: 24,
+  },
+  versionContainer: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.base,
+  },
+  versionText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    textAlign: 'center',
+  },
+  versionSubtext: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 10,
+    color: Theme.colors.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+    opacity: 0.6,
+  },
+  diagCard: {
+    width: '100%',
+    backgroundColor: Theme.colors.surfaceRaised,
+    borderRadius: Theme.radius.md,
+    borderWidth: 1,
+    borderColor: Theme.colors.surfaceBorder,
+    padding: Spacing.md,
+    marginTop: Spacing.base,
+    gap: 8,
+  },
+  diagHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.hairline,
+    marginBottom: 2,
+  },
+  diagTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.signalCyan,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  diagCheckBtn: {
+    backgroundColor: Theme.colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Theme.radius.xs,
+    borderWidth: 1,
+    borderColor: Theme.colors.surfaceBorder,
+  },
+  diagCheckBtnText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 10,
+    color: Theme.colors.textPrimary,
+  },
+  diagRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  diagLabel: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 11,
+    color: Theme.colors.textSecondary,
+  },
+  diagValue: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 11,
+    color: Theme.colors.textPrimary,
+    maxWidth: '65%',
+    textAlign: 'right',
+  },
+  diagErrorRow: {
+    marginTop: 4,
+    padding: 6,
+    borderRadius: Theme.radius.xs,
+    backgroundColor: 'rgba(255, 59, 78, 0.12)',
+  },
+  diagErrorText: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 10,
+    color: Theme.colors.flagRed,
   },
 });
