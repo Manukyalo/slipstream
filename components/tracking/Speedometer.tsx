@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { Colors, FontFamily } from '@/constants/design';
+import Svg, { Path, Circle } from 'react-native-svg';
+import { Theme } from '@/constants/theme';
 
 interface SpeedometerProps {
   speedKmh: number;
@@ -16,13 +16,14 @@ export const Speedometer: React.FC<SpeedometerProps> = ({
   maxDialSpeed = 240,
   size = 240,
 }) => {
-  const strokeWidth = 14;
-  const radius = (size - strokeWidth * 2) / 2;
+  // Precision thin-stroke instrument styling
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth * 4) / 2;
   const center = size / 2;
 
-  // Gauge sweeps from 135deg to 405deg (270 degrees total arc)
-  const startAngle = 135;
-  const endAngle = 405;
+  // Sweeps 240 degrees (from 150deg to 390deg)
+  const startAngle = 150;
+  const endAngle = 390;
   const totalArc = endAngle - startAngle;
 
   const clampedSpeed = Math.min(Math.max(0, speedKmh), maxDialSpeed);
@@ -45,7 +46,19 @@ export const Speedometer: React.FC<SpeedometerProps> = ({
       const startPoint = polarToCartesian(x, y, r, start);
       const endPoint = polarToCartesian(x, y, r, end);
       const largeArcFlag = end - start <= 180 ? '0' : '1';
-      return ['M', startPoint.x, startPoint.y, 'A', r, r, 0, largeArcFlag, 1, endPoint.x, endPoint.y].join(' ');
+      return [
+        'M',
+        startPoint.x.toFixed(2),
+        startPoint.y.toFixed(2),
+        'A',
+        r,
+        r,
+        0,
+        largeArcFlag,
+        1,
+        endPoint.x.toFixed(2),
+        endPoint.y.toFixed(2),
+      ].join(' ');
     },
     [polarToCartesian],
   );
@@ -56,66 +69,57 @@ export const Speedometer: React.FC<SpeedometerProps> = ({
   );
 
   const activeArc = useMemo(() => {
-    if (progressRatio <= 0.005) return '';
+    if (progressRatio <= 0.002) return '';
     return describeArc(center, center, radius, startAngle, currentAngle);
   }, [describeArc, center, radius, startAngle, currentAngle, progressRatio]);
 
-  const needlePosition = useMemo(
+  // Leading needle tip
+  const needleTip = useMemo(
     () => polarToCartesian(center, center, radius, currentAngle),
     [polarToCartesian, center, radius, currentAngle],
   );
 
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
-      <Svg width={size} height={size}>
-        <Defs>
-          <LinearGradient id="activeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={Colors.accentCyan} />
-            <Stop offset="75%" stopColor={Colors.accentCyan} />
-            <Stop offset="100%" stopColor={Colors.accentOrange} />
-          </LinearGradient>
-        </Defs>
-
-        {/* Outer track */}
+    <View style={[styles.container, { width: size, height: size * 0.85 }]}>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {/* Graphite background track */}
         <Path
           d={backgroundArc}
           fill="none"
-          stroke={Colors.bgElevated}
+          stroke={Theme.colors.surfaceRaised}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
         />
 
-        {/* Active progress track */}
+        {/* Active signal-cyan telemetry arc */}
         {activeArc ? (
           <Path
             d={activeArc}
             fill="none"
-            stroke="url(#activeGradient)"
+            stroke={Theme.colors.signalCyan}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
           />
         ) : null}
 
-        {/* Indicator bead at active head */}
+        {/* Needle indicator dot */}
         <Circle
-          cx={needlePosition.x}
-          cy={needlePosition.y}
-          r={5}
-          fill={Colors.textPrimary}
+          cx={needleTip.x}
+          cy={needleTip.y}
+          r={4}
+          fill={Theme.colors.signalCyan}
         />
       </Svg>
 
-      {/* Numerical display in dial center */}
-      <View style={styles.centerTextContainer}>
-        <Text style={styles.speedValue}>{Math.round(speedKmh)}</Text>
-        <Text style={styles.speedUnit}>KM/H</Text>
-
-        {topSpeedKmh > 0 ? (
-          <View style={styles.topSpeedBadge}>
-            <Text style={styles.topSpeedLabel}>PEAK</Text>
-            <Text style={styles.topSpeedVal}>{Math.round(topSpeedKmh)}</Text>
-          </View>
-        ) : null}
+      {/* Central hero readout */}
+      <View style={styles.centerReadout}>
+        <Text style={styles.speedNumeral}>{Math.round(clampedSpeed)}</Text>
+        <Text style={styles.unitLabel}>km/h</Text>
+        {topSpeedKmh > 0 && (
+          <Text style={styles.topSpeedLabel}>
+            TOP <Text style={styles.topSpeedVal}>{Math.round(topSpeedKmh)}</Text>
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -125,48 +129,38 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
+    position: 'relative',
   },
-  centerTextContainer: {
+  centerReadout: {
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    top: '32%',
   },
-  speedValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: 56,
-    color: Colors.textPrimary,
-    letterSpacing: -2,
-    lineHeight: 60,
+  speedNumeral: {
+    fontFamily: Theme.fonts.numberBold,
+    fontVariant: ['tabular-nums'],
+    fontSize: 58,
+    lineHeight: 64,
+    color: Theme.colors.textPrimary,
+    letterSpacing: -1,
   },
-  speedUnit: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 12,
-    color: Colors.accentCyan,
-    letterSpacing: 2,
-    marginTop: -2,
-  },
-  topSpeedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.bgSurface,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: 8,
+  unitLabel: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 13,
+    color: Theme.colors.textMuted,
+    textTransform: 'lowercase',
+    marginTop: -4,
   },
   topSpeedLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: 9,
-    color: Colors.textMuted,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
     letterSpacing: 0.5,
+    marginTop: 6,
   },
   topSpeedVal: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.accentOrange,
+    fontFamily: Theme.fonts.numberSemiBold,
+    color: Theme.colors.signalCyan,
   },
 });

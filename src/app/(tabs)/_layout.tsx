@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
-import { Colors, FontFamily, FontSize } from '@/constants/design';
+import { StyleSheet } from 'react-native';
+import { Gauge, Route, Flag, Zap, Trophy, BarChart3, Settings } from 'lucide-react-native';
+import { Theme } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
@@ -8,8 +9,8 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.accentCyan,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarActiveTintColor: Theme.colors.signalCyan,
+        tabBarInactiveTintColor: Theme.colors.textMuted,
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
@@ -17,49 +18,49 @@ export default function TabLayout() {
         name="track"
         options={{
           title: 'Track',
-          tabBarIcon: () => <Text style={styles.tabIcon}>🚗</Text>,
+          tabBarIcon: ({ color }) => <Gauge size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="roads"
         options={{
           title: 'Roads',
-          tabBarIcon: () => <Text style={styles.tabIcon}>🛣️</Text>,
+          tabBarIcon: ({ color }) => <Route size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="track-day"
         options={{
           title: 'Circuit',
-          tabBarIcon: () => <Text style={styles.tabIcon}>🏁</Text>,
+          tabBarIcon: ({ color }) => <Flag size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="drag-race"
         options={{
           title: 'Drag',
-          tabBarIcon: () => <Text style={styles.tabIcon}>⚡</Text>,
+          tabBarIcon: ({ color }) => <Zap size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="rankings"
         options={{
           title: 'Rankings',
-          tabBarIcon: () => <Text style={styles.tabIcon}>🏆</Text>,
+          tabBarIcon: ({ color }) => <Trophy size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="recap"
         options={{
           title: 'Recap',
-          tabBarIcon: () => <Text style={styles.tabIcon}>📊</Text>,
+          tabBarIcon: ({ color }) => <BarChart3 size={18} strokeWidth={1.5} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: () => <Text style={styles.tabIcon}>⚙️</Text>,
+          tabBarIcon: ({ color }) => <Settings size={18} strokeWidth={1.5} color={color} />,
         }}
       />
     </Tabs>
@@ -68,18 +69,16 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: Colors.bgSurface,
-    borderTopColor: Colors.border,
+    backgroundColor: Theme.colors.surface,
+    borderTopColor: Theme.colors.hairline,
     borderTopWidth: 1,
     height: 64,
     paddingBottom: 8,
     paddingTop: 8,
   },
   tabLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.label,
-  },
-  tabIcon: {
-    fontSize: 16,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
 });

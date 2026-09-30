@@ -189,7 +189,7 @@ export default function SettingsScreen() {
 
         {/* Google Sign-In */}
         <View style={styles.authCard}>
-          <Text style={styles.authCardTitle}>Join the Grid 🏁</Text>
+          <Text style={styles.authCardTitle}>Join the grid</Text>
           <Text style={styles.authCardSub}>
             Sign in to record trips, build your garage, join drag-race leaderboards, and save your
             performance history across devices.

@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Check, MapPin, Navigation, X } from 'lucide-react-native';
 import { useTracking } from '@/contexts/TrackingContext';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useLapTimer } from '@/hooks/useLapTimer';
@@ -21,6 +22,7 @@ import {
   lapDelta,
   type Track,
 } from '@/services/trackDay';
+import { Theme } from '@/constants/theme';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 
 // ─── Track Selector ───────────────────────────────────────────────────────────
@@ -109,7 +111,7 @@ function TrackSelector({ currentLon, currentLat, onSelect, onDefineNew }: TrackS
               onPress={() => onSelect(item)}
             >
               <View style={sel.trackRowLeft}>
-                <Text style={sel.trackRowIcon}>🏁</Text>
+                <Navigation size={16} strokeWidth={1.5} color={Theme.colors.signalCyan} />
               </View>
               <View style={sel.trackRowCenter}>
                 <Text style={sel.trackName} numberOfLines={1}>{item.name}</Text>
@@ -221,7 +223,7 @@ function DefineTrack({
 
       {/* Step 1: Name */}
       <View style={def.section}>
-        <Text style={def.sectionLabel}>TRACK NAME *</Text>
+        <Text style={def.sectionLabel}>Track name <Text style={def.required}>*</Text></Text>
         <TextInput
           style={def.input}
           value={name}
@@ -231,7 +233,7 @@ function DefineTrack({
           maxLength={100}
           returnKeyType="next"
         />
-        <Text style={def.sectionLabel}>VENUE / LOCATION</Text>
+        <Text style={def.sectionLabel}>Venue / location</Text>
         <TextInput
           style={def.input}
           value={locationName}
@@ -245,10 +247,12 @@ function DefineTrack({
 
       {/* Step 2: Start/Finish */}
       <View style={def.section}>
-        <Text style={def.sectionLabel}>START / FINISH LINE</Text>
+        <Text style={def.sectionLabel}>Start / finish line</Text>
         {sfPoint ? (
           <View style={def.capturedBadge}>
-            <Text style={def.capturedIcon}>✅</Text>
+            <View style={def.capturedIconWrap}>
+              <Check size={14} strokeWidth={2} color={Theme.colors.signalCyan} />
+            </View>
             <View>
               <Text style={def.capturedText}>
                 {sfPoint.lat.toFixed(6)}, {sfPoint.lon.toFixed(6)}
@@ -275,7 +279,8 @@ function DefineTrack({
               captureStartFinish();
             }}
           >
-            <Text style={def.captureBtnText}>📍 Set Start/Finish at Current Position</Text>
+            <MapPin size={14} strokeWidth={1.5} color={Colors.accentCyan} style={{ marginRight: 6 }} />
+            <Text style={def.captureBtnText}>Set start/finish at current position</Text>
           </Pressable>
         )}
       </View>
@@ -284,7 +289,7 @@ function DefineTrack({
       {sfPoint && (
         <View style={def.section}>
           <View style={def.sectorHeader}>
-            <Text style={def.sectionLabel}>SECTOR SPLITS (OPTIONAL)</Text>
+            <Text style={def.sectionLabel}>Sector splits <Text style={def.optional}>(optional)</Text></Text>
             <Pressable
               style={({ pressed }) => [def.addSectorBtn, pressed && def.pressed]}
               onPress={addSector}
@@ -307,7 +312,7 @@ function DefineTrack({
                   onPress={() => removeSector(i)}
                   style={({ pressed }) => [def.clearBtn, pressed && def.pressed]}
                 >
-                  <Text style={def.clearBtnText}>✕</Text>
+                  <X size={12} strokeWidth={2} color={Colors.accentRed} />
                 </Pressable>
               </View>
             ))
@@ -431,7 +436,7 @@ function LiveSession({
         keyExtractor={(l) => l.id}
         ListHeaderComponent={
           state.completedLaps.length > 0 ? (
-            <Text style={live.lapListHeader}>COMPLETED LAPS</Text>
+            <Text style={live.lapListHeader}>Completed laps</Text>
           ) : null
         }
         renderItem={({ item, index }) => {
@@ -439,7 +444,7 @@ function LiveSession({
           return (
             <View style={[live.lapRow, isBest && live.lapRowBest]}>
               <Text style={[live.lapNum, isBest && live.lapBestText]}>
-                {isBest ? '🏆' : `L${state.completedLaps.length - index}`}
+                {isBest ? 'Best' : `L${state.completedLaps.length - index}`}
               </Text>
               <Text style={[live.lapTime, isBest && live.lapBestText]}>
                 {formatLapTime(item.lapTimeMs)}
@@ -500,7 +505,7 @@ function SessionSummary({ laps, bestLapIndex, trackName, onDone }: SessionSummar
         return (
           <View key={lap.id} style={[sum.lapRow, isBest && sum.lapRowBest]}>
             <Text style={[sum.lapNum, isBest && sum.lapBestText]}>
-              {isBest ? '🏆 BEST' : `Lap ${laps.length - index}`}
+              {isBest ? '✦ Best' : `Lap ${laps.length - index}`}
             </Text>
             <Text style={[sum.lapTime, isBest && sum.lapBestText]}>
               {formatLapTime(lap.lapTimeMs)}
@@ -566,7 +571,7 @@ export default function TrackDayScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Track Day</Text>
         <Text style={styles.headerSub}>
-          {mode === 'select' && 'Closed-circuit lap timing · no public data crossover'}
+          {mode === 'select' && 'Lap timing · closed circuit'}
           {mode === 'define' && 'Define a new circuit'}
           {mode === 'session' && selectedTrack?.name}
           {mode === 'summary' && 'Session summary'}
@@ -691,7 +696,9 @@ const def = StyleSheet.create({
   title: { fontFamily: FontFamily.bold, fontSize: FontSize.h2, color: Colors.textPrimary },
   sub: { fontFamily: FontFamily.regular, fontSize: FontSize.caption, color: Colors.textMuted },
   section: { gap: Spacing.sm },
-  sectionLabel: { fontFamily: FontFamily.semiBold, fontSize: FontSize.caption, color: Colors.textMuted, letterSpacing: 0.8 },
+  sectionLabel: { fontFamily: Theme.fonts.bodyMedium, fontSize: 12, color: Theme.colors.textMuted, marginBottom: 2 },
+  required: { color: Theme.colors.signalCyan },
+  optional: { fontFamily: Theme.fonts.bodyRegular, fontSize: 11, color: Theme.colors.textMuted },
   input: {
     backgroundColor: Colors.bgSurface, borderWidth: 1, borderColor: Colors.border,
     borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
@@ -701,6 +708,7 @@ const def = StyleSheet.create({
   captureBtn: {
     backgroundColor: Colors.accentCyanDim, borderWidth: 1, borderColor: Colors.accentCyan,
     borderRadius: Radius.md, paddingVertical: Spacing.md, alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center',
   },
   captureBtnText: { fontFamily: FontFamily.bold, fontSize: FontSize.label, color: Colors.accentCyan },
   capturedBadge: {
@@ -708,7 +716,11 @@ const def = StyleSheet.create({
     backgroundColor: Colors.bgSurface, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.accentGreen,
     padding: Spacing.md,
   },
-  capturedIcon: { fontSize: 20 },
+  capturedIconWrap: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: Colors.accentGreen + '22',
+    alignItems: 'center', justifyContent: 'center',
+  },
   capturedText: { fontFamily: FontFamily.medium, fontSize: FontSize.caption, color: Colors.accentGreen },
   capturedSubText: { fontFamily: FontFamily.regular, fontSize: FontSize.caption, color: Colors.textMuted },
   clearBtn: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
@@ -756,8 +768,8 @@ const live = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   timerText: {
-    fontFamily: FontFamily.bold, fontSize: 52, color: Colors.accentCyan,
-    letterSpacing: 2, fontVariant: ['tabular-nums'],
+    fontFamily: Theme.fonts.numberBold, fontSize: 56, color: Colors.accentCyan,
+    letterSpacing: 1, fontVariant: ['tabular-nums'],
   },
   bestLabel: { fontFamily: FontFamily.regular, fontSize: FontSize.caption, color: Colors.textMuted, marginTop: Spacing.xs },
   sectorsRow: {
@@ -772,8 +784,12 @@ const live = StyleSheet.create({
   sectorChipTime: { fontFamily: FontFamily.regular, fontSize: FontSize.caption, color: Colors.textSecondary },
   lapList: { padding: Spacing.base, paddingBottom: Spacing['4xl'] },
   lapListHeader: {
-    fontFamily: FontFamily.semiBold, fontSize: FontSize.caption,
-    color: Colors.textMuted, letterSpacing: 0.8, marginBottom: Spacing.sm,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: Spacing.sm,
   },
   lapRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md,

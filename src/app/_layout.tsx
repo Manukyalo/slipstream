@@ -10,6 +10,12 @@ import {
   SpaceGrotesk_600SemiBold,
   SpaceGrotesk_700Bold,
 } from '@expo-google-fonts/space-grotesk';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { TrackingProvider } from '@/contexts/TrackingContext';
 import { SplashGate } from '@/components/ui/SplashGate';
@@ -33,6 +39,10 @@ function RootNavigation() {
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
     SpaceGrotesk_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
   });
 
   const [isLocked, setIsLocked] = useState<boolean>(false);

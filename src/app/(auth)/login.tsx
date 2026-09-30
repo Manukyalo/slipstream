@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { Car } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -124,7 +125,7 @@ export default function LoginScreen() {
           {mode === 'signup' && referralCode ? (
             <View style={styles.referralBanner}>
               <View style={styles.referralIconContainer}>
-                <Text style={styles.referralIcon}>🏎️</Text>
+                <Car size={18} strokeWidth={1.5} color={Colors.accentOrange} />
               </View>
               <View style={styles.referralContent}>
                 <Text style={styles.referralTitle}>Driver Invite Applied</Text>

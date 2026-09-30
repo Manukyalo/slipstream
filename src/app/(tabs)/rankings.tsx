@@ -23,7 +23,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AlertTriangle, Flag, RefreshCw } from 'lucide-react-native';
 import { Colors, Duration, FontFamily, FontSize, LineHeight, Radius, Spacing } from '@/constants/design';
+import { Theme } from '@/constants/theme';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useRankings, type UseRankingsParams } from '@/hooks/useRankings';
 import type {
@@ -284,7 +286,9 @@ function LeaderboardSkeleton() {
 function EmptyState({ message }: { message: string }) {
   return (
     <View style={styles.centeredState}>
-      <Text style={styles.emptyIcon}>🏁</Text>
+      <View style={styles.stateIconWrap}>
+        <Flag size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
+      </View>
       <Text style={styles.emptyTitle}>No entries yet</Text>
       <Text style={styles.emptyBody}>{message}</Text>
     </View>
@@ -294,10 +298,13 @@ function EmptyState({ message }: { message: string }) {
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <View style={styles.centeredState}>
-      <Text style={styles.emptyIcon}>⚠️</Text>
-      <Text style={styles.emptyTitle}>Couldn&apos;t load leaderboard</Text>
+      <View style={styles.stateIconWrap}>
+        <AlertTriangle size={28} strokeWidth={1.5} color={Theme.colors.flagRed} />
+      </View>
+      <Text style={styles.emptyTitle}>{"Couldn't load leaderboard"}</Text>
       <Text style={styles.emptyBody}>{message}</Text>
       <TouchableOpacity style={styles.retryBtn} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry loading leaderboard">
+        <RefreshCw size={14} strokeWidth={1.5} color={Theme.colors.textPrimary} style={{ marginRight: 6 }} />
         <Text style={styles.retryBtnText}>Retry</Text>
       </TouchableOpacity>
     </View>
@@ -693,76 +700,72 @@ const styles = StyleSheet.create({
     gap: 0,
   },
 
-  // Rows
+  // Rows — flat hairline list, no individual card chrome
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.sm,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.hairline,
     gap: Spacing.md,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
   },
   rowHighlight: {
-    backgroundColor: Colors.bgElevated,
-    borderColor: Colors.accentCyan + '40',
+    // Subtle left rail only — no fill that breaks the flat list rhythm
   },
   rowAccentRail: {
     position: 'absolute',
-    left: 0,
+    left: -4,
     top: 0,
     bottom: 0,
-    width: 3,
-    backgroundColor: Colors.accentCyan,
-    borderTopLeftRadius: Radius.md,
-    borderBottomLeftRadius: Radius.md,
+    width: 2,
+    backgroundColor: Theme.colors.signalCyan,
   },
   rowMid: {
     flex: 1,
     gap: 2,
   },
   rowName: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 14,
+    color: Theme.colors.textPrimary,
   },
   rowSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
   },
   rowStat: {
     alignItems: 'flex-end',
     gap: 2,
   },
   rowStatValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
+    fontFamily: Theme.fonts.numberSemiBold,
+    fontVariant: ['tabular-nums'],
+    fontSize: 15,
   },
   rowStatSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
   },
 
   // Rank badge
   rankBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.xs,
+    width: 28,
+    height: 28,
+    borderRadius: Theme.radius.xs,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bgBase,
+    borderColor: Theme.colors.surfaceBorder,
+    backgroundColor: Theme.colors.bgVoid,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rankText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
+    fontFamily: Theme.fonts.numberBold,
+    fontVariant: ['tabular-nums'],
+    fontSize: 12,
   },
 
   // Avatar
@@ -771,8 +774,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    fontFamily: FontFamily.bold,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.numberBold,
+    color: Theme.colors.textPrimary,
   },
 
   // Skeleton
@@ -783,37 +786,45 @@ const styles = StyleSheet.create({
   // Empty / error
   centeredState: {
     alignItems: 'center',
-    paddingVertical: Spacing['3xl'],
-    gap: Spacing.md,
+    paddingVertical: Theme.spacing['3xl'],
+    gap: Theme.spacing.md,
   },
-  emptyIcon: {
-    fontSize: 40,
+  stateIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: Theme.radius.full,
+    backgroundColor: Theme.colors.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   emptyTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 15,
+    color: Theme.colors.textPrimary,
   },
   emptyBody: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 13,
+    color: Theme.colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: Spacing.xl,
-    lineHeight: LineHeight.label,
+    paddingHorizontal: Theme.spacing.xl,
+    lineHeight: 20,
   },
   retryBtn: {
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.bgElevated,
+    marginTop: Theme.spacing.sm,
+    paddingHorizontal: Theme.spacing.xl,
+    paddingVertical: Theme.spacing.md,
+    borderRadius: Theme.radius.md,
+    backgroundColor: Theme.colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Theme.colors.surfaceBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   retryBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 13,
+    color: Theme.colors.textPrimary,
   },
 });

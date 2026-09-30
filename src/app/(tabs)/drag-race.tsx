@@ -6,13 +6,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { RotateCcw, Car } from 'lucide-react-native';
+import { Theme, HeroStat } from '@/constants/theme';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useDragRace } from '@/hooks/useDragRace';
 import { ChristmasTree } from '@/components/drag/ChristmasTree';
-import { SplitTimeCard } from '@/components/drag/SplitTimeCard';
-import { SprintTimeCard } from '@/components/drag/SprintTimeCard';
-import { DRAG_DISTANCE_METERS } from '@/services/dragRuns';
 
 export default function DragRaceScreen() {
   const { primaryVehicle } = useVehicles();
@@ -21,7 +19,6 @@ export default function DragRaceScreen() {
     elapsedMs,
     currentSpeedKmh,
     distanceTraveledMeters,
-    topSpeedKmh,
     splits,
     sprints,
     mode,
@@ -33,8 +30,7 @@ export default function DragRaceScreen() {
     manualLaunch,
   } = useDragRace();
 
-  const formattedTimer = (elapsedMs / 1000).toFixed(3);
-  const progressRatio = Math.min(1, distanceTraveledMeters / DRAG_DISTANCE_METERS.one_mile);
+  const formattedTimer = (elapsedMs / 1000).toFixed(2);
 
   return (
     <ScrollView
@@ -42,45 +38,42 @@ export default function DragRaceScreen() {
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
-      {/* Screen Header */}
+      {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Drag Race</Text>
-          <Text style={styles.subtitle}>Quarter, Half & Full Mile Telemetry</Text>
+          <Text style={styles.title}>Drag telemetry</Text>
+          <Text style={styles.subtitle}>Quarter, half & full mile benchmarks</Text>
         </View>
 
         {primaryVehicle ? (
           <View style={styles.vehicleChip}>
+            <Car size={13} strokeWidth={1.5} color={Theme.colors.textMuted} />
             <Text style={styles.vehicleChipText} numberOfLines={1}>
-              🏎️ {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
+              {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
             </Text>
           </View>
-        ) : (
-          <View style={styles.noVehicleChip}>
-            <Text style={styles.noVehicleText}>🏎️ Garage: No car set</Text>
-          </View>
-        )}
+        ) : null}
       </View>
 
-      {/* Target Mode Selector Pills */}
+      {/* Target Mode Selector Tabs */}
       <View style={styles.modeSelector}>
         {(
           [
-            { id: 'all', label: 'ALL BENCHMARKS' },
-            { id: 'sprint_60', label: '0–60 MPH' },
-            { id: 'sprint_100', label: '0–100 KM/H' },
-            { id: 'drag', label: '1/4 MILE' },
+            { id: 'all', label: 'All benchmarks' },
+            { id: 'sprint_60', label: '0–60 mph' },
+            { id: 'sprint_100', label: '0–100 km/h' },
+            { id: 'drag', label: '1/4 mile' },
           ] as const
         ).map((item) => {
           const isActive = mode === item.id;
           return (
             <Pressable
               key={item.id}
-              style={[styles.modePill, isActive && styles.modePillActive]}
+              style={[styles.modeTab, isActive && styles.modeTabActive]}
               onPress={() => setMode(item.id)}
               disabled={status === 'running' || status === 'staging'}
             >
-              <Text style={[styles.modePillText, isActive && styles.modePillTextActive]}>
+              <Text style={[styles.modeTabText, isActive && styles.modeTabTextActive]}>
                 {item.label}
               </Text>
             </Pressable>
@@ -88,182 +81,138 @@ export default function DragRaceScreen() {
         })}
       </View>
 
-      {/* Mandatory Accuracy Disclaimer */}
-      <View style={styles.disclaimerBox}>
-        <View style={styles.disclaimerHeader}>
-          <Text style={styles.disclaimerIcon}>⚠️</Text>
-          <Text style={styles.disclaimerTitle}>GPS-ESTIMATED · NOT CERTIFIED</Text>
-        </View>
-        <Text style={styles.disclaimerBody}>
-          Phone GPS (~1–10Hz) provides estimated timings. Data is non-certified and intended for personal benchmarking only.
-        </Text>
-      </View>
+      {/* Accuracy note as quiet text-muted caption beneath tabs */}
+      <Text style={styles.captionNote}>
+        GPS-estimated timing (~1–10Hz). Non-certified; intended for personal benchmarking.
+      </Text>
 
-      {/* Staging Christmas Tree */}
-      <View style={styles.treeSection}>
-        <ChristmasTree status={status} />
-      </View>
+      {/* Christmas Tree (no card wrapper, clean SVG) */}
+      <ChristmasTree status={status} />
 
-      {/* Live Cockpit Digital Display */}
-      <View style={styles.cockpitCard}>
-        <View style={styles.cockpitRow}>
-          <View style={styles.timerBlock}>
-            <Text style={styles.digitalTimer}>
-              {formattedTimer}
-              <Text style={styles.secUnit}>s</Text>
-            </Text>
-            <Text style={styles.digitalTimerLabel}>ELAPSED DURATION</Text>
+      {/* Hero Timer: primary number on the void */}
+      <View style={styles.heroTimerSection}>
+        <HeroStat
+          value={formattedTimer}
+          unit="s"
+          label={status === 'running' ? 'Elapsed time' : 'Ready'}
+          accentColor={status === 'running' ? Theme.colors.ignitionAmber : Theme.colors.textPrimary}
+          size="hero"
+        />
+
+        <View style={styles.telemetryQuickRow}>
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatVal}>{Math.round(currentSpeedKmh)}</Text>
+            <Text style={styles.quickStatUnit}>km/h</Text>
           </View>
-
-          <View style={styles.speedBlock}>
-            <Text style={styles.speedValue}>{currentSpeedKmh.toFixed(0)}</Text>
-            <Text style={styles.speedUnit}>KM/H</Text>
+          <View style={styles.quickDivider} />
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatVal}>{gForceMagnitude.toFixed(2)}</Text>
+            <Text style={styles.quickStatUnit}>G</Text>
           </View>
-        </View>
-
-        {/* Live G-force & Top Speed Readout */}
-        <View style={styles.telemetryBar}>
-          <View style={styles.telemetryItem}>
-            <Text style={styles.telemetryValue}>{gForceMagnitude.toFixed(2)} G</Text>
-            <Text style={styles.telemetryLabel}>INSTANT ACCEL</Text>
-          </View>
-
-          <View style={styles.telemetryDivider} />
-
-          <View style={styles.telemetryItem}>
-            <Text style={styles.telemetryValue}>{distanceTraveledMeters.toFixed(0)} m</Text>
-            <Text style={styles.telemetryLabel}>DISTANCE</Text>
-          </View>
-
-          <View style={styles.telemetryDivider} />
-
-          <View style={styles.telemetryItem}>
-            <Text style={styles.telemetryValue}>{topSpeedKmh.toFixed(0)} km/h</Text>
-            <Text style={styles.telemetryLabel}>PEAK TRAP</Text>
-          </View>
-        </View>
-
-        {/* Distance Progress Bar */}
-        <View style={styles.progressSection}>
-          <View style={styles.progressBarTrack}>
-            <View style={[styles.progressBarFill, { width: `${progressRatio * 100}%` }]} />
-          </View>
-          <View style={styles.progressMarkers}>
-            <Text style={styles.markerText}>0m</Text>
-            <Text style={styles.markerText}>1/4 mi (402m)</Text>
-            <Text style={styles.markerText}>1/2 mi (805m)</Text>
-            <Text style={styles.markerText}>1 mi (1609m)</Text>
+          <View style={styles.quickDivider} />
+          <View style={styles.quickStat}>
+            <Text style={styles.quickStatVal}>{Math.round(distanceTraveledMeters)}</Text>
+            <Text style={styles.quickStatUnit}>m</Text>
           </View>
         </View>
       </View>
 
-      {/* Drag Strip Controls */}
-      <View style={styles.controlsSection}>
-        {status === 'idle' && (
+      {/* Benchmarks Section: converted to HeroStat rows without per-benchmark card wrappers */}
+      <View style={styles.benchmarksSection}>
+        <Text style={styles.sectionHeader}>Benchmarks</Text>
+
+        <View style={styles.benchmarksGrid}>
+          {/* 0-60 mph */}
+          <View style={styles.benchmarkItem}>
+            <Text style={styles.benchmarkLabel}>0–60 mph</Text>
+            <HeroStat
+              value={sprints.zero_to_60 ? (sprints.zero_to_60.elapsedMs / 1000).toFixed(2) : '--'}
+              unit="s"
+              size="large"
+              accentColor={sprints.zero_to_60 ? Theme.colors.ignitionAmber : Theme.colors.textMuted}
+            />
+          </View>
+
+          {/* 0-100 km/h */}
+          <View style={styles.benchmarkItem}>
+            <Text style={styles.benchmarkLabel}>0–100 km/h</Text>
+            <HeroStat
+              value={sprints.zero_to_100 ? (sprints.zero_to_100.elapsedMs / 1000).toFixed(2) : '--'}
+              unit="s"
+              size="large"
+              accentColor={sprints.zero_to_100 ? Theme.colors.ignitionAmber : Theme.colors.textMuted}
+            />
+          </View>
+
+          {/* 1/4 mile */}
+          <View style={styles.benchmarkItem}>
+            <Text style={styles.benchmarkLabel}>1/4 mile</Text>
+            <HeroStat
+              value={splits.quarter_mile ? (splits.quarter_mile.elapsedMs / 1000).toFixed(2) : '--'}
+              unit="s"
+              size="large"
+              accentColor={splits.quarter_mile ? Theme.colors.ignitionAmber : Theme.colors.textMuted}
+            />
+            {splits.quarter_mile && (
+              <Text style={styles.trapSpeedCaption}>
+                Trap: {Math.round(splits.quarter_mile.trapSpeedKmh)} km/h
+              </Text>
+            )}
+          </View>
+
+          {/* 1/2 mile */}
+          <View style={styles.benchmarkItem}>
+            <Text style={styles.benchmarkLabel}>1/2 mile</Text>
+            <HeroStat
+              value={splits.half_mile ? (splits.half_mile.elapsedMs / 1000).toFixed(2) : '--'}
+              unit="s"
+              size="large"
+              accentColor={splits.half_mile ? Theme.colors.ignitionAmber : Theme.colors.textMuted}
+            />
+            {splits.half_mile && (
+              <Text style={styles.trapSpeedCaption}>
+                Trap: {Math.round(splits.half_mile.trapSpeedKmh)} km/h
+              </Text>
+            )}
+          </View>
+        </View>
+      </View>
+
+      {/* Primary Action Button: ignition-amber flat-fill, Inter medium, sentence case */}
+      <View style={styles.actionRow}>
+        {status === 'idle' || status === 'finished' ? (
           <Pressable
-            style={({ pressed }) => [styles.stageBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
             onPress={stageVehicle}
           >
-            <Text style={styles.stageBtnText}>STAGE VEHICLE</Text>
+            <Text style={styles.primaryBtnText}>Stage vehicle</Text>
           </Pressable>
-        )}
-
-        {status === 'staging' && (
-          <View style={styles.stagingNotice}>
-            <Text style={styles.stagingNoticeText}>
-              CALIBRATING SENSORS... COME TO A COMPLETE STOP
-            </Text>
-          </View>
-        )}
-
-        {status === 'staged' && (
-          <View style={styles.stagedControls}>
-            <View style={styles.readyBanner}>
-              <Text style={styles.readyBannerText}>LAUNCH READY — HIT THE ACCELERATOR</Text>
-            </View>
-
-            <View style={styles.stagedButtonsRow}>
-              <Pressable
-                style={({ pressed }) => [styles.manualBtn, pressed && styles.pressed]}
-                onPress={manualLaunch}
-              >
-                <Text style={styles.manualBtnText}>Manual Launch</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [styles.abortBtn, pressed && styles.pressed]}
-                onPress={abortRun}
-              >
-                <Text style={styles.abortBtnText}>Abort</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {status === 'running' && (
+        ) : status === 'staged' ? (
+          <Pressable
+            style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+            onPress={manualLaunch}
+          >
+            <Text style={styles.primaryBtnText}>Launch now</Text>
+          </Pressable>
+        ) : (
           <Pressable
             style={({ pressed }) => [styles.abortBtn, pressed && styles.pressed]}
             onPress={abortRun}
           >
-            <Text style={styles.abortBtnText}>ABORT RUN</Text>
+            <Text style={styles.abortBtnText}>Abort run</Text>
           </Pressable>
         )}
 
         {status === 'finished' && (
           <Pressable
-            style={({ pressed }) => [styles.stageBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.resetBtn, pressed && styles.pressed]}
             onPress={resetTimer}
           >
-            <Text style={styles.stageBtnText}>NEW RUN</Text>
+            <RotateCcw size={15} strokeWidth={1.5} color={Theme.colors.textMuted} />
+            <Text style={styles.resetBtnText}>Reset</Text>
           </Pressable>
         )}
       </View>
-
-      {/* Acceleration Benchmarks (0-60 / 0-100) */}
-      {(mode === 'all' || mode === 'sprint_60' || mode === 'sprint_100') && (
-        <View style={styles.splitsSection}>
-          <Text style={styles.sprintsSectionTitle}>ACCELERATION BENCHMARKS</Text>
-
-          {(mode === 'all' || mode === 'sprint_60') && (
-            <SprintTimeCard
-              sprintType="zero_to_60"
-              sprint={sprints.zero_to_60}
-            />
-          )}
-
-          {(mode === 'all' || mode === 'sprint_100') && (
-            <SprintTimeCard
-              sprintType="zero_to_100"
-              sprint={sprints.zero_to_100}
-            />
-          )}
-        </View>
-      )}
-
-      {/* Timed Distance Splits (1/4, 1/2, 1 Mile) */}
-      {(mode === 'all' || mode === 'drag') && (
-        <View style={styles.splitsSection}>
-          <Text style={styles.splitsSectionTitle}>TIMED DISTANCE SPLITS</Text>
-
-          <SplitTimeCard
-            distanceType="quarter_mile"
-            split={splits.quarter_mile}
-            targetMeters={Math.round(DRAG_DISTANCE_METERS.quarter_mile)}
-          />
-
-          <SplitTimeCard
-            distanceType="half_mile"
-            split={splits.half_mile}
-            targetMeters={Math.round(DRAG_DISTANCE_METERS.half_mile)}
-          />
-
-          <SplitTimeCard
-            distanceType="one_mile"
-            split={splits.one_mile}
-            targetMeters={Math.round(DRAG_DISTANCE_METERS.one_mile)}
-          />
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -271,319 +220,196 @@ export default function DragRaceScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bgBase,
+    backgroundColor: Theme.colors.bgVoid,
   },
   contentContainer: {
-    paddingTop: 60,
-    paddingHorizontal: Spacing.base,
-    paddingBottom: Spacing['4xl'],
+    paddingTop: 54,
+    paddingHorizontal: Theme.spacing.lg,
+    paddingBottom: Theme.spacing['3xl'],
   },
   header: {
-    marginBottom: Spacing.base,
-    gap: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: Theme.spacing.lg,
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h1,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.numberBold,
+    fontSize: 24,
+    color: Theme.colors.textPrimary,
   },
   subtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 13,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
   },
   vehicleChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.bgElevated,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Theme.colors.surfaceRaised,
+    borderRadius: Theme.radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: Spacing.xs,
+    borderColor: Theme.colors.surfaceBorder,
+    maxWidth: '45%',
   },
   vehicleChipText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
-  },
-  noVehicleChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: Colors.bgElevated,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-    marginTop: Spacing.xs,
-  },
-  noVehicleText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-  },
-  disclaimerBox: {
-    backgroundColor: 'rgba(255, 184, 0, 0.08)',
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 184, 0, 0.35)',
-    padding: Spacing.md,
-    marginBottom: Spacing.base,
-  },
-  disclaimerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginBottom: 4,
-  },
-  disclaimerIcon: {
-    fontSize: 14,
-  },
-  disclaimerTitle: {
-    fontFamily: FontFamily.bold,
+    fontFamily: Theme.fonts.bodyMedium,
     fontSize: 11,
-    color: '#FFB800',
-    letterSpacing: 0.5,
-  },
-  disclaimerBody: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.textSecondary,
-    lineHeight: 16,
-  },
-  treeSection: {
-    marginBottom: Spacing.base,
-  },
-  cockpitCard: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.base,
-    marginBottom: Spacing.base,
-  },
-  cockpitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderSubtle,
-  },
-  timerBlock: {
-    flex: 1,
-  },
-  digitalTimer: {
-    fontFamily: FontFamily.bold,
-    fontSize: 34,
-    color: Colors.textPrimary,
-    letterSpacing: -1,
-  },
-  secUnit: {
-    fontSize: FontSize.h2,
-    fontFamily: FontFamily.medium,
-    color: Colors.accentCyan,
-  },
-  digitalTimerLabel: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  speedBlock: {
-    alignItems: 'flex-end',
-  },
-  speedValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: 32,
-    color: Colors.accentCyan,
-    letterSpacing: -1,
-  },
-  speedUnit: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    letterSpacing: 1,
-  },
-  telemetryBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-  },
-  telemetryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  telemetryValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
-    color: Colors.textPrimary,
-  },
-  telemetryLabel: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 8,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
-    marginTop: 2,
-  },
-  telemetryDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: Colors.borderSubtle,
-  },
-  progressSection: {
-    paddingTop: Spacing.sm,
-  },
-  progressBarTrack: {
-    height: 6,
-    backgroundColor: Colors.bgElevated,
-    borderRadius: Radius.full,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: Colors.accentCyan,
-  },
-  progressMarkers: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 4,
-  },
-  markerText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 8,
-    color: Colors.textMuted,
-  },
-  controlsSection: {
-    marginBottom: Spacing.xl,
-  },
-  stageBtn: {
-    backgroundColor: Colors.accentCyan,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.base,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stageBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.bgBase,
-    letterSpacing: 1,
-  },
-  stagingNotice: {
-    backgroundColor: 'rgba(255, 184, 0, 0.12)',
-    borderColor: '#FFB800',
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.base,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-  },
-  stagingNoticeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
-    color: '#FFB800',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  stagedControls: {
-    gap: Spacing.sm,
-  },
-  readyBanner: {
-    backgroundColor: 'rgba(0, 255, 102, 0.15)',
-    borderColor: '#00FF66',
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  readyBannerText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
-    color: '#00FF66',
-    letterSpacing: 0.5,
-  },
-  stagedButtonsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  manualBtn: {
-    flex: 1,
-    backgroundColor: Colors.bgElevated,
-    borderColor: Colors.border,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  manualBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.caption,
-    color: Colors.textPrimary,
-  },
-  abortBtn: {
-    backgroundColor: Colors.accentRedDim,
-    borderColor: Colors.accentRed,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.base,
-    alignItems: 'center',
-  },
-  abortBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.accentRed,
-    letterSpacing: 1,
-  },
-  splitsSection: {
-    gap: Spacing.xs,
-  },
-  splitsSectionTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    letterSpacing: 1,
-    marginBottom: Spacing.sm,
-  },
-  sprintsSectionTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.accentOrange,
-    letterSpacing: 1,
-    marginBottom: Spacing.sm,
+    color: Theme.colors.textSecondary,
   },
   modeSelector: {
     flexDirection: 'row',
-    gap: Spacing.xs,
-    marginBottom: Spacing.md,
-  },
-  modePill: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: Radius.sm,
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Theme.colors.surface,
+    borderRadius: Theme.radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Theme.colors.surfaceBorder,
+    padding: 3,
+  },
+  modeTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: Theme.radius.xs,
+  },
+  modeTabActive: {
+    backgroundColor: Theme.colors.surfaceRaised,
+  },
+  modeTabText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+  },
+  modeTabTextActive: {
+    color: Theme.colors.signalCyan,
+  },
+  captionNote: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    textAlign: 'center',
+    marginTop: Theme.spacing.sm,
+    marginBottom: Theme.spacing.md,
+  },
+  heroTimerSection: {
+    alignItems: 'center',
+    marginVertical: Theme.spacing.base,
+  },
+  telemetryQuickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Theme.spacing.base,
+    marginTop: Theme.spacing.md,
+    backgroundColor: Theme.colors.surface,
+    paddingVertical: 8,
+    paddingHorizontal: Theme.spacing.lg,
+    borderRadius: Theme.radius.full,
+    borderWidth: 1,
+    borderColor: Theme.colors.surfaceBorder,
+  },
+  quickStat: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  quickStatVal: {
+    fontFamily: Theme.fonts.numberSemiBold,
+    fontVariant: ['tabular-nums'],
+    fontSize: 15,
+    color: Theme.colors.textPrimary,
+  },
+  quickStatUnit: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 10,
+    color: Theme.colors.textMuted,
+  },
+  quickDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: Theme.colors.hairline,
+  },
+  benchmarksSection: {
+    marginTop: Theme.spacing.lg,
+    marginBottom: Theme.spacing.xl,
+  },
+  sectionHeader: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: Theme.spacing.md,
+  },
+  benchmarksGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Theme.spacing.md,
+  },
+  benchmarkItem: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingVertical: Theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.hairline,
+  },
+  benchmarkLabel: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    marginBottom: 4,
+  },
+  trapSpeedCaption: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
+  },
+  actionRow: {
+    gap: Theme.spacing.sm,
+    marginTop: Theme.spacing.sm,
+  },
+  primaryBtn: {
+    backgroundColor: Theme.colors.ignitionAmber,
+    paddingVertical: 15,
+    borderRadius: Theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modePillActive: {
-    backgroundColor: Colors.accentOrangeDim,
-    borderColor: Colors.accentOrange,
+  primaryBtnText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 15,
+    color: Theme.colors.textInverse,
   },
-  modePillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
+  abortBtn: {
+    backgroundColor: Theme.colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: Theme.colors.flagRed,
+    paddingVertical: 15,
+    borderRadius: Theme.radius.md,
+    alignItems: 'center',
   },
-  modePillTextActive: {
-    color: Colors.accentOrange,
-    fontFamily: FontFamily.bold,
+  abortBtnText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 15,
+    color: Theme.colors.flagRed,
+  },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+  },
+  resetBtnText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 13,
+    color: Theme.colors.textMuted,
   },
   pressed: {
-    opacity: 0.8,
+    opacity: 0.82,
   },
 });

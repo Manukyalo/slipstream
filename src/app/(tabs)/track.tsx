@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
+import { Route as RouteIcon, Timer, Gauge, AlertTriangle, Download, Car, Share2, BookmarkPlus } from 'lucide-react-native';
+import { Theme, StatRow } from '@/constants/theme';
 import { useTracking } from '@/contexts/TrackingContext';
 import { Speedometer } from '@/components/tracking/Speedometer';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
@@ -99,6 +100,8 @@ export default function TrackScreen() {
     downloadCurrentArea(currentCoords);
   };
 
+  const avgSpeed = elapsedSeconds > 0 ? ((distanceMeters / elapsedSeconds) * 3.6).toFixed(1) : '0.0';
+
   return (
     <View style={styles.container}>
       {/* Approaching Hazard Alert Banner */}
@@ -110,7 +113,7 @@ export default function TrackScreen() {
         />
       )}
 
-      {/* Map layer in top half */}
+      {/* Map layer */}
       <View style={styles.mapContainer}>
         <SlipstreamMap
           centerCoordinate={currentCoords ?? undefined}
@@ -119,24 +122,37 @@ export default function TrackScreen() {
           zoomLevel={15}
         />
 
-        {/* Map overlay controls */}
-        <View style={styles.mapHeaderOverlay}>
+        {/* Section 1: Connected Status Strip (single surface-raised background, hairline dividers) */}
+        <View style={styles.connectedStrip}>
+          {/* Segment 1: Live Status */}
+          <View style={styles.stripSegment}>
+            <View style={[styles.statusDot, isTracking ? styles.dotLive : styles.dotReady]} />
+            <Text style={styles.stripText}>{isTracking ? 'Live' : 'Ready'}</Text>
+          </View>
+
+          <View style={styles.stripDivider} />
+
+          {/* Segment 2: Offline Map */}
           <Pressable
-            style={({ pressed }) => [styles.offlineBtn, pressed && styles.btnPressed]}
+            style={({ pressed }) => [styles.stripSegment, pressed && styles.pressed]}
             onPress={handleOfflineDownload}
             disabled={downloadState.isDownloading}
           >
-            <Text style={styles.offlineBtnText}>
+            <Download size={13} strokeWidth={1.5} color={Theme.colors.textMuted} />
+            <Text style={styles.stripText}>
               {downloadState.isDownloading
-                ? `MAP ${downloadState.progressPercentage}%`
+                ? `${downloadState.progressPercentage}%`
                 : downloadState.completed
-                ? 'OFFLINE READY'
-                : 'OFFLINE MAP'}
+                ? 'Offline ready'
+                : 'Offline map'}
             </Text>
           </Pressable>
 
+          <View style={styles.stripDivider} />
+
+          {/* Segment 3: Drop Pin */}
           <Pressable
-            style={({ pressed }) => [styles.hazardPinBtn, pressed && styles.btnPressed]}
+            style={({ pressed }) => [styles.stripSegment, pressed && styles.pressed]}
             onPress={() => {
               if (!currentCoords) {
                 Alert.alert('GPS Required', 'Waiting for location fix to drop a hazard pin.');
@@ -145,72 +161,70 @@ export default function TrackScreen() {
               setReportModalVisible(true);
             }}
           >
-            <Text style={styles.hazardPinText}>⚠️ DROP PIN</Text>
+            <AlertTriangle size={13} strokeWidth={1.5} color={Theme.colors.flagRed} />
+            <Text style={[styles.stripText, { color: Theme.colors.flagRed }]}>Drop pin</Text>
           </Pressable>
-        </View>
-
-        {/* Live GPS / status chip */}
-        <View style={styles.statusChip}>
-          <View style={[styles.statusDot, isTracking ? styles.dotGreen : styles.dotCyan]} />
-          <Text style={styles.statusText}>{isTracking ? 'RECORDING' : 'READY'}</Text>
         </View>
       </View>
 
       {/* Cockpit telemetry panel in bottom half */}
       <View style={styles.telemetryContainer}>
         {primaryVehicle ? (
-          <View style={styles.vehiclePill}>
-            <Text style={styles.vehiclePillText} numberOfLines={1}>
-              🏎️ {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
+          <View style={styles.vehicleHeader}>
+            <Car size={14} strokeWidth={1.5} color={Theme.colors.textMuted} />
+            <Text style={styles.vehicleHeaderText} numberOfLines={1}>
+              {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
               {primaryVehicle.nickname ? ` · ${primaryVehicle.nickname}` : ''}
             </Text>
           </View>
         ) : null}
 
+        {/* Speed Dial: no card chrome, type on void */}
         <View style={styles.speedometerWrap}>
           <Speedometer speedKmh={currentSpeedKmh} topSpeedKmh={topSpeedKmh} />
         </View>
 
-        {/* Telemetry Stats Bar */}
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{(distanceMeters / 1000).toFixed(2)}</Text>
-            <Text style={styles.statLabel}>KM DISTANCE</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>{formatDuration(elapsedSeconds)}</Text>
-            <Text style={styles.statLabel}>DURATION</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>
-              {elapsedSeconds > 0
-                ? ((distanceMeters / elapsedSeconds) * 3.6).toFixed(1)
-                : '0.0'}
-            </Text>
-            <Text style={styles.statLabel}>AVG KM/H</Text>
-          </View>
+        {/* Trip Stats Footer: flat list with StatRow primitive */}
+        <View style={styles.statsList}>
+          <StatRow
+            icon={RouteIcon}
+            label="Distance"
+            value={(distanceMeters / 1000).toFixed(2)}
+            unit="km"
+          />
+          <StatRow
+            icon={Timer}
+            label="Elapsed"
+            value={formatDuration(elapsedSeconds)}
+          />
+          <StatRow
+            icon={Gauge}
+            label="Average"
+            value={avgSpeed}
+            unit="km/h"
+            isLast={true}
+          />
         </View>
 
         {/* Saved trip confirmation banner */}
         {completedMetrics ? (
           <View style={styles.savedBanner}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.savedTitle}>TRIP SAVED TO CLOUD</Text>
+              <Text style={styles.savedTitle}>Trip saved to cloud</Text>
               <Text style={styles.savedMeta}>
                 {(completedMetrics.distanceMeters / 1000).toFixed(2)} km · Top {completedMetrics.topSpeedKmh} km/h · Avg {completedMetrics.avgSpeedKmh} km/h
               </Text>
             </View>
             <View style={styles.savedActionsRow}>
               <Pressable
-                style={({ pressed }) => [styles.saveRoadBtn, pressed && styles.btnPressed]}
+                style={({ pressed }) => [styles.savedActionBtn, pressed && styles.pressed]}
                 onPress={() => setSaveRoadModalVisible(true)}
               >
-                <Text style={styles.saveRoadBtnText}>🛣️ SAVE ROAD</Text>
+                <BookmarkPlus size={14} strokeWidth={1.5} color={Theme.colors.signalCyan} />
+                <Text style={styles.savedActionBtnText}>Save road</Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [styles.shareTripBtn, pressed && styles.btnPressed]}
+                style={({ pressed }) => [styles.savedActionBtn, pressed && styles.pressed]}
                 onPress={() =>
                   setShareParams({
                     type: 'trip',
@@ -224,23 +238,24 @@ export default function TrackScreen() {
                   })
                 }
               >
-                <Text style={styles.shareTripBtnText}>📸 STORY</Text>
+                <Share2 size={14} strokeWidth={1.5} color={Theme.colors.textPrimary} />
+                <Text style={styles.savedActionBtnText}>Share</Text>
               </Pressable>
             </View>
           </View>
         ) : null}
 
-        {/* Start / Stop control button */}
+        {/* Primary Action Button: ignition-amber flat-fill, Inter medium, sentence case */}
         <Pressable
           style={({ pressed }) => [
-            styles.actionButton,
-            isTracking ? styles.stopButton : styles.startButton,
-            pressed && styles.btnPressed,
+            styles.ctaButton,
+            isTracking ? styles.ctaStop : styles.ctaStart,
+            pressed && styles.pressed,
           ]}
           onPress={handleStartStop}
         >
-          <Text style={[styles.actionBtnText, isTracking && styles.stopBtnText]}>
-            {isTracking ? 'FINISH & SAVE TRIP' : 'START TRACKING'}
+          <Text style={[styles.ctaText, isTracking && styles.ctaStopText]}>
+            {isTracking ? 'Stop tracking' : 'Start tracking'}
           </Text>
         </Pressable>
       </View>
@@ -276,224 +291,157 @@ export default function TrackScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bgBase,
+    backgroundColor: Theme.colors.bgVoid,
   },
   mapContainer: {
-    flex: 1.1,
+    flex: 1.05,
     position: 'relative',
   },
-  mapHeaderOverlay: {
+  // Connected status strip: single surface-raised background, hairline dividers between segments
+  connectedStrip: {
     position: 'absolute',
     top: 54,
-    right: Spacing.base,
+    left: Theme.spacing.base,
+    right: Theme.spacing.base,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    backgroundColor: Theme.colors.surfaceRaised,
+    borderRadius: Theme.radius.sm,
+    borderWidth: 1,
+    borderColor: Theme.colors.surfaceBorder,
     zIndex: 10,
   },
-  hazardPinBtn: {
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.accentRed,
-  },
-  hazardPinText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.accentRed,
-    letterSpacing: 0.5,
-  },
-  offlineBtn: {
-    backgroundColor: 'rgba(8, 11, 20, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  offlineBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.accentCyan,
-    letterSpacing: 1,
-  },
-  statusChip: {
-    position: 'absolute',
-    top: 54,
-    left: Spacing.base,
+  stripSegment: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    backgroundColor: 'rgba(8, 11, 20, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    zIndex: 10,
+    paddingVertical: 10,
+  },
+  stripDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: Theme.colors.hairline,
+  },
+  stripText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textPrimary,
   },
   statusDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-  dotGreen: {
-    backgroundColor: Colors.accentGreen,
+  dotLive: {
+    backgroundColor: Theme.colors.signalCyan,
   },
-  dotCyan: {
-    backgroundColor: Colors.accentCyan,
-  },
-  statusText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 10,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
+  dotReady: {
+    backgroundColor: Theme.colors.textMuted,
   },
   telemetryContainer: {
-    flex: 1.3,
-    backgroundColor: Colors.bgSurface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    flex: 1.35,
+    backgroundColor: Theme.colors.surface,
+    borderTopLeftRadius: Theme.radius.lg,
+    borderTopRightRadius: Theme.radius.lg,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
+    borderTopColor: Theme.colors.surfaceBorder,
+    paddingHorizontal: Theme.spacing.xl,
+    paddingTop: Theme.spacing.md,
+    paddingBottom: Theme.spacing.xl,
     justifyContent: 'space-between',
+  },
+  vehicleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  vehicleHeaderText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
   },
   speedometerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.bgElevated,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.base,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  statBox: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.border,
-  },
-  statValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  statLabel: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-    marginTop: 2,
+  statsList: {
+    marginVertical: 4,
   },
   savedBanner: {
-    backgroundColor: Colors.accentGreenDim,
-    borderColor: Colors.accentGreen,
+    backgroundColor: Theme.colors.surfaceRaised,
+    borderColor: Theme.colors.signalCyan,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 8,
+    borderRadius: Theme.radius.md,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: Spacing.sm,
+    gap: Theme.spacing.sm,
+    marginBottom: 4,
+  },
+  savedTitle: {
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 12,
+    color: Theme.colors.signalCyan,
+  },
+  savedMeta: {
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    marginTop: 2,
   },
   savedActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  saveRoadBtn: {
-    backgroundColor: 'rgba(0, 212, 255, 0.15)',
+  savedActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Theme.colors.surface,
     paddingVertical: 6,
     paddingHorizontal: 8,
-    borderRadius: 6,
+    borderRadius: Theme.radius.xs,
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
+    borderColor: Theme.colors.surfaceBorder,
   },
-  saveRoadBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 9,
-    color: Colors.accentCyan,
-    letterSpacing: 0.5,
-  },
-  shareTripBtn: {
-    backgroundColor: 'rgba(34, 197, 94, 0.25)',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Colors.accentGreen,
-  },
-  shareTripBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 9,
-    color: Colors.accentGreen,
-    letterSpacing: 0.5,
-  },
-  savedTitle: {
-    fontFamily: FontFamily.bold,
+  savedActionBtnText: {
+    fontFamily: Theme.fonts.bodyMedium,
     fontSize: 11,
-    color: Colors.accentGreen,
-    letterSpacing: 1,
+    color: Theme.colors.textPrimary,
   },
-  savedMeta: {
-    fontFamily: FontFamily.medium,
-    fontSize: 10,
-    color: Colors.textPrimary,
-    marginTop: 2,
-  },
-  actionButton: {
-    borderRadius: 12,
-    paddingVertical: Spacing.base,
+  // Flat-fill ignition-amber button, Inter medium, sentence case
+  ctaButton: {
+    width: '100%',
+    paddingVertical: 15,
+    borderRadius: Theme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  startButton: {
-    backgroundColor: Colors.accentCyan,
+  ctaStart: {
+    backgroundColor: Theme.colors.ignitionAmber,
   },
-  stopButton: {
-    backgroundColor: Colors.accentRed,
-  },
-  actionBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.bgBase,
-    letterSpacing: 1,
-  },
-  stopBtnText: {
-    color: Colors.textPrimary,
-  },
-  btnPressed: {
-    opacity: 0.85,
-  },
-  vehiclePill: {
-    alignSelf: 'center',
-    backgroundColor: Colors.bgElevated,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
-    borderRadius: 9999,
+  ctaStop: {
+    backgroundColor: Theme.colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.xs,
+    borderColor: Theme.colors.flagRed,
   },
-  vehiclePillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+  ctaText: {
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 15,
+    color: Theme.colors.textInverse,
+    letterSpacing: 0.3,
+  },
+  ctaStopText: {
+    color: Theme.colors.flagRed,
+  },
+  pressed: {
+    opacity: 0.82,
   },
 });

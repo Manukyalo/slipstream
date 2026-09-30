@@ -7,8 +7,25 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Camera, ChevronRight, Shield, X, Zap } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
+import { Theme } from '@/constants/theme';
+import { Spacing } from '@/constants/design';
 import { HAZARD_CONFIG, type HazardType } from '@/services/hazards';
+
+// Map hazard types to Lucide icons — keeps HAZARD_CONFIG clean for other consumers
+const HAZARD_ICONS: Record<HazardType, LucideIcon> = {
+  speed_trap: Zap,
+  camera: Camera,
+  police: Shield,
+};
+
+// Accent colors per type (from HAZARD_CONFIG, avoids drift)
+const HAZARD_ACCENT_COLORS: Record<HazardType, string> = {
+  speed_trap: Theme.colors.ignitionAmber,
+  camera: Theme.colors.signalCyan,
+  police: Theme.colors.flagRed,
+};
 
 interface HazardReportModalProps {
   visible: boolean;
@@ -40,62 +57,80 @@ export function HazardReportModal({
   return (
     <Modal
       visible={visible}
-      animationType="fade"
+      animationType="slide"
       transparent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.dialog}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        {/* Stop propagation so tapping inside the sheet doesn't close it */}
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          {/* Handle */}
+          <View style={styles.handle} />
+
+          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>DROP HAZARD PIN</Text>
+            <View>
+              <Text style={styles.title}>Drop hazard pin</Text>
+              <Text style={styles.subtitle}>
+                Warn fellow drivers. Reports expire in 3 hours.
+              </Text>
+            </View>
             <Pressable
               style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
               onPress={onClose}
               disabled={submittingType !== null}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
             >
-              <Text style={styles.closeBtnText}>✕</Text>
+              <X size={14} strokeWidth={2} color={Theme.colors.textMuted} />
             </Pressable>
           </View>
 
-          <Text style={styles.subtitle}>
-            Warn fellow drivers of road enforcement. Reports expire automatically in 3 hours.
-          </Text>
-
+          {/* Options — flat hairline list */}
           <View style={styles.optionsList}>
-            {types.map((t) => {
+            {types.map((t, idx) => {
               const cfg = HAZARD_CONFIG[t];
+              const Icon = HAZARD_ICONS[t];
+              const accent = HAZARD_ACCENT_COLORS[t];
               const isSubmitting = submittingType === t;
+              const isLast = idx === types.length - 1;
 
               return (
                 <Pressable
                   key={t}
                   style={({ pressed }) => [
                     styles.optionItem,
-                    pressed && styles.optionItemPressed,
+                    !isLast && styles.optionDivider,
+                    pressed && styles.pressed,
                   ]}
                   onPress={() => handleSelect(t)}
                   disabled={submittingType !== null}
+                  accessibilityRole="button"
+                  accessibilityLabel={cfg.label}
                 >
-                  <View style={styles.iconWrap}>
-                    <Text style={styles.icon}>{cfg.icon}</Text>
+                  {/* Icon container */}
+                  <View style={[styles.iconWrap, { backgroundColor: accent + '18' }]}>
+                    <Icon size={18} strokeWidth={1.5} color={accent} />
                   </View>
 
+                  {/* Text */}
                   <View style={styles.optionDetails}>
                     <Text style={styles.optionLabel}>{cfg.label}</Text>
                     <Text style={styles.optionDesc}>{cfg.description}</Text>
                   </View>
 
+                  {/* Right — spinner or chevron */}
                   {isSubmitting ? (
-                    <ActivityIndicator size="small" color={Colors.accentCyan} />
+                    <ActivityIndicator size="small" color={accent} />
                   ) : (
-                    <Text style={styles.chevron}>›</Text>
+                    <ChevronRight size={16} strokeWidth={1.5} color={Theme.colors.textMuted} />
                   )}
                 </Pressable>
               );
             })}
           </View>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -103,104 +138,94 @@ export function HazardReportModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: Colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.base,
+    backgroundColor: 'rgba(11,14,17,0.72)',
+    justifyContent: 'flex-end',
   },
-  dialog: {
-    width: '100%',
-    maxWidth: 380,
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.base,
+  sheet: {
+    backgroundColor: Theme.colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Theme.colors.surfaceBorder,
+    paddingBottom: Spacing['2xl'],
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Theme.colors.surfaceBorder,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: Spacing.xs,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Theme.spacing.md,
+    paddingBottom: Theme.spacing.lg,
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    letterSpacing: 0.5,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 17,
+    color: Theme.colors.textPrimary,
+    letterSpacing: -0.2,
   },
   subtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-    lineHeight: 16,
-    marginBottom: Spacing.base,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
+    marginTop: 3,
   },
   closeBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Theme.colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  closeBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontFamily: FontFamily.bold,
+    borderColor: Theme.colors.surfaceBorder,
+    marginTop: 2,
   },
   optionsList: {
-    gap: Spacing.sm,
+    paddingHorizontal: Spacing.base,
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.bgElevated,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
+    paddingVertical: 16,
+    gap: Theme.spacing.md,
   },
-  optionItemPressed: {
-    borderColor: Colors.accentCyan,
-    backgroundColor: Colors.bgSurface,
+  optionDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.hairline,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.bgSurface,
+    width: 40,
+    height: 40,
+    borderRadius: Theme.radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-  },
-  icon: {
-    fontSize: 22,
   },
   optionDetails: {
     flex: 1,
   },
   optionLabel: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 14,
+    color: Theme.colors.textPrimary,
   },
   optionDesc: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: Theme.fonts.bodyRegular,
+    fontSize: 12,
+    color: Theme.colors.textMuted,
     marginTop: 2,
   },
-  chevron: {
-    fontFamily: FontFamily.bold,
-    fontSize: 20,
-    color: Colors.textMuted,
-  },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.65,
   },
 });

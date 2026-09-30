@@ -14,6 +14,18 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import {
+  ArrowRight,
+  Globe,
+  Lock,
+  MapPin,
+  Navigation,
+  Route,
+  Satellite,
+  Trash2,
+  X,
+} from 'lucide-react-native';
+import { Theme } from '@/constants/theme';
 import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants/design';
 import { useTracking } from '@/contexts/TrackingContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -218,8 +230,10 @@ export default function RoadsScreen() {
         </View>
       ) : activeTab === 'nearby' && (currentLon === null || currentLat === null) ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyIcon}>📡</Text>
-          <Text style={styles.emptyTitle}>Acquiring GPS Fix</Text>
+          <View style={styles.stateIconWrap}>
+            <Satellite size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
+          </View>
+          <Text style={styles.emptyTitle}>Acquiring GPS fix</Text>
           <Text style={styles.emptySub}>
             Location access is needed to show scenic roads near your position.
           </Text>
@@ -232,7 +246,9 @@ export default function RoadsScreen() {
         </View>
       ) : filteredRoads.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyIcon}>🛣️</Text>
+          <View style={styles.stateIconWrap}>
+            <Route size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
+          </View>
           <Text style={styles.emptyTitle}>
             {searchQuery ? 'No matching roads found' : 'No saved roads yet'}
           </Text>
@@ -265,9 +281,12 @@ export default function RoadsScreen() {
                       {item.name}
                     </Text>
                     {item.distanceMeters !== undefined && (
-                      <Text style={styles.cardProximity}>
-                        📍 {formatProximity(item.distanceMeters)}
-                      </Text>
+                      <View style={styles.proximityRow}>
+                        <MapPin size={10} strokeWidth={1.5} color={Colors.accentCyan} />
+                        <Text style={styles.cardProximity}>
+                          {formatProximity(item.distanceMeters)}
+                        </Text>
+                      </View>
                     )}
                   </View>
                   <View style={styles.badgeRow}>
@@ -286,7 +305,7 @@ export default function RoadsScreen() {
                         ]}
                       >
                         <Text style={styles.visibilityText}>
-                          {item.isPublic ? 'PUBLIC' : 'PRIVATE'}
+                          {item.isPublic ? 'public' : 'private'}
                         </Text>
                       </View>
                     )}
@@ -300,7 +319,10 @@ export default function RoadsScreen() {
                 ) : null}
 
                 <View style={styles.cardFooter}>
-                  <Text style={styles.cardAction}>Tap for details & navigation →</Text>
+                  <View style={styles.cardActionRow}>
+                    <Text style={styles.cardAction}>View details</Text>
+                    <ArrowRight size={12} strokeWidth={1.5} color={Colors.accentCyan} />
+                  </View>
                   {isOwner && (
                     <Pressable
                       onPress={(e) => {
@@ -354,8 +376,9 @@ export default function RoadsScreen() {
                 <Pressable
                   onPress={() => setSelectedRoad(null)}
                   style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
+                  accessibilityLabel="Close"
                 >
-                  <Text style={styles.closeBtnText}>✕</Text>
+                  <X size={14} strokeWidth={2} color={Theme.colors.textMuted} />
                 </Pressable>
               </View>
 
@@ -370,14 +393,17 @@ export default function RoadsScreen() {
 
               {user?.id === selectedRoad.userId && (
                 <View style={styles.ownerControls}>
-                  <Text style={styles.modalSectionLabel}>MANAGE ROAD</Text>
+                  <Text style={styles.modalSectionLabel}>Manage road</Text>
                   <View style={styles.ownerActions}>
                     <Pressable
                       style={({ pressed }) => [styles.ownerBtn, pressed && styles.pressed]}
                       onPress={() => handleToggleVisibility(selectedRoad)}
                     >
+                      {selectedRoad.isPublic
+                        ? <Lock size={13} strokeWidth={1.5} color={Theme.colors.textPrimary} />
+                        : <Globe size={13} strokeWidth={1.5} color={Theme.colors.signalCyan} />}
                       <Text style={styles.ownerBtnText}>
-                        {selectedRoad.isPublic ? '🔒 Make Private' : '🌐 Make Public'}
+                        {selectedRoad.isPublic ? 'Make private' : 'Make public'}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -388,8 +414,9 @@ export default function RoadsScreen() {
                       ]}
                       onPress={() => handleDeleteRoad(selectedRoad)}
                     >
+                      <Trash2 size={13} strokeWidth={1.5} color={Colors.accentRed} />
                       <Text style={[styles.ownerBtnText, styles.deleteBtnText]}>
-                        🗑️ Delete
+                        Delete
                       </Text>
                     </Pressable>
                   </View>
@@ -402,7 +429,8 @@ export default function RoadsScreen() {
                   style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
                   onPress={() => openNavigation(selectedRoad)}
                 >
-                  <Text style={styles.navBtnText}>🧭 Navigate to Start</Text>
+                  <Navigation size={14} strokeWidth={1.5} color={Colors.accentCyan} />
+                  <Text style={styles.navBtnText}>Navigate to start</Text>
                 </Pressable>
 
                 <Pressable
@@ -412,7 +440,7 @@ export default function RoadsScreen() {
                     router.push('/(tabs)/track');
                   }}
                 >
-                  <Text style={styles.driveBtnText}>🏎️ Drive Route</Text>
+                  <Text style={styles.driveBtnText}>Drive route</Text>
                 </Pressable>
               </View>
             </View>
@@ -487,21 +515,21 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: FontSize.body,
   },
-  centerContainer: {
-    flex: 1,
+  // Empty / loading states
+  stateIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: Theme.radius.full,
+    backgroundColor: Theme.colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
+    marginBottom: Theme.spacing.md,
   },
   loadingText: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.body,
     color: Colors.textSecondary,
     marginTop: Spacing.md,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: Spacing.md,
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
@@ -529,36 +557,48 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     color: Colors.textInverse,
   },
+  // List
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
   listContent: {
-    padding: Spacing.base,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.sm,
     paddingBottom: 100,
   },
+  // Cards -> flat hairline rows
   card: {
-    backgroundColor: Colors.bgSurface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.colors.hairline,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: Spacing.sm,
+    marginBottom: 6,
   },
   cardHeaderLeft: {
     flex: 1,
   },
   cardTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: Theme.fonts.bodySemiBold,
+    fontSize: 14,
+    color: Theme.colors.textPrimary,
+  },
+  proximityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   cardProximity: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
-    marginTop: 2,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 11,
+    color: Theme.colors.signalCyan,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -590,10 +630,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   visibilityText: {
-    fontFamily: FontFamily.medium,
+    fontFamily: Theme.fonts.bodyMedium,
     fontSize: 9,
     color: Colors.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   cardDesc: {
     fontFamily: FontFamily.regular,
@@ -606,15 +646,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: Spacing.md,
-    paddingTop: Spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    marginTop: Spacing.sm,
+  },
+  cardActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   cardAction: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 12,
+    color: Theme.colors.signalCyan,
   },
   deleteLink: {
     fontFamily: FontFamily.medium,
@@ -622,7 +664,7 @@ const styles = StyleSheet.create({
     color: Colors.accentRed,
   },
   separator: {
-    height: Spacing.md,
+    height: 0, // separator replaced by card borderBottomWidth hairline
   },
   pressed: {
     opacity: 0.75,
@@ -674,10 +716,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   modalSectionLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: 10,
-    color: Colors.textMuted,
-    letterSpacing: 1,
+    fontFamily: Theme.fonts.bodyMedium,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: 4,
   },
   modalSectionText: {
@@ -706,6 +749,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.bgBase,
+    flexDirection: 'row',
+    gap: 6,
   },
   ownerBtnText: {
     fontFamily: FontFamily.medium,
@@ -733,6 +778,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.accentCyan,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
   },
   navBtnText: {
     fontFamily: FontFamily.bold,

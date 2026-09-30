@@ -1,93 +1,82 @@
 /**
- * Slipstream Design Tokens
+ * Slipstream Design Tokens & Compatibility Layer
  *
- * Single source of truth for all colors, spacing, typography, and radii.
- * Import from here; never hardcode a color or magic number in a component.
+ * Mapped to the motorsport telemetry design system in theme.ts.
  */
+
+import { Theme } from './theme';
+
+export * from './theme';
 
 export const Colors = {
   // Backgrounds
-  bgBase: '#080B14',
-  bgSurface: '#0F1421',
-  bgElevated: '#181E2E',
+  bgBase: Theme.colors.bgVoid,
+  bgSurface: Theme.colors.surface,
+  bgElevated: Theme.colors.surfaceRaised,
 
   // Borders
-  border: '#273147',
-  borderSubtle: '#1C2535',
+  border: Theme.colors.surfaceBorder,
+  borderSubtle: Theme.colors.hairline,
 
   // Accents
-  accentCyan: '#00D4FF',
-  accentCyanDim: 'rgba(0, 212, 255, 0.15)',
-  accentOrange: '#FF6B35',
-  accentOrangeDim: 'rgba(255, 107, 53, 0.15)',
+  accentCyan: Theme.colors.signalCyan,
+  accentCyanDim: 'rgba(52, 229, 240, 0.12)',
+  accentOrange: Theme.colors.ignitionAmber,
+  accentOrangeDim: 'rgba(255, 122, 26, 0.12)',
   accentGreen: '#22C55E',
-  accentGreenDim: 'rgba(34, 197, 94, 0.15)',
-  accentRed: '#EF4444',
-  accentRedDim: 'rgba(239, 68, 68, 0.15)',
+  accentGreenDim: 'rgba(34, 197, 94, 0.12)',
+  accentRed: Theme.colors.flagRed,
+  accentRedDim: 'rgba(255, 59, 78, 0.14)',
 
   // Text
-  textPrimary: '#EDF1FB',
-  textSecondary: '#8B96B0',
-  textMuted: '#4B5470',
-  textInverse: '#080B14',
+  textPrimary: Theme.colors.textPrimary,
+  textSecondary: Theme.colors.textSecondary,
+  textMuted: Theme.colors.textMuted,
+  textInverse: Theme.colors.textInverse,
 
   // Overlay
-  overlay: 'rgba(8, 11, 20, 0.75)',
+  overlay: 'rgba(11, 14, 17, 0.85)',
 } as const;
 
-export const Spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  base: 16,
-  lg: 20,
-  xl: 24,
-  '2xl': 32,
-  '3xl': 48,
-  '4xl': 64,
-} as const;
-
-export const Radius = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  full: 9999,
-} as const;
+export const Spacing = Theme.spacing;
+export const Radius = Theme.radius;
 
 export const FontFamily = {
-  regular: 'SpaceGrotesk_400Regular',
-  medium: 'SpaceGrotesk_500Medium',
-  semiBold: 'SpaceGrotesk_600SemiBold',
+  // Space Grotesk for numbers/readouts
+  number: 'SpaceGrotesk_700Bold',
+  numberMedium: 'SpaceGrotesk_500Medium',
   bold: 'SpaceGrotesk_700Bold',
+  semiBold: 'SpaceGrotesk_600SemiBold',
+
+  // Inter for UI chrome and body
+  medium: 'Inter_500Medium',
+  regular: 'Inter_400Regular',
+  bodySemiBold: 'Inter_600SemiBold',
 } as const;
 
 export const FontSize = {
-  display: 32,
-  h1: 24,
+  hero: 56,
+  display: 40,
+  h1: 28,
   h2: 20,
   body: 15,
-  label: 13,
-  caption: 11,
-  mono: 14,
-} as const;
-
-export const LineHeight = {
-  display: 37,
-  h1: 29,
-  h2: 26,
-  body: 22,
-  label: 18,
-  caption: 15,
-  mono: 17,
+  caption: 13,
+  label: 11,
 } as const;
 
 export const Duration = {
-  micro: 150,
-  standard: 250,
-  reveal: 400,
-  shimmer: 1400,
+  fast: 150,
+  normal: 250,
+  slow: 350,
+  shimmer: 1200,
+  reveal: 250,
 } as const;
 
-export type ColorKey = keyof typeof Colors;
+export const LineHeight = {
+  tight: 1.2,
+  normal: 1.4,
+  relaxed: 1.6,
+  hero: 64,
+  h1: 34,
+  h2: 26,
+} as const;
