@@ -1,0 +1,19 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.slipstream.app",
+        "paths": [
+          "/i/*",
+          "/auth/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID.com.slipstream.app"
+    ]
+  }
+}

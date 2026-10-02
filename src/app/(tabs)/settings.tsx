@@ -19,6 +19,7 @@ import { Theme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/hooks/useVehicles';
 import { useReferral } from '@/hooks/useReferral';
+import { APP_DOMAIN } from '@/services/referrals';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { VehicleCard } from '@/components/vehicles/VehicleCard';
 import { AddVehicleModal } from '@/components/vehicles/AddVehicleModal';
@@ -355,7 +356,7 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.inviteLinkPreview}>
-            drivetrack.app/i/{referralCode ?? 'DRIVE1'}
+            {APP_DOMAIN}/i/{referralCode ?? 'DRIVE1'}
           </Text>
 
           <Pressable

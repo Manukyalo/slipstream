@@ -15,9 +15,9 @@ import { Car } from 'lucide-react-native';
 import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  getPendingReferralCode,
   clearPendingReferralCode,
   claimReferralCode,
+  detectAndSaveLaunchReferral,
 } from '@/services/referrals';
 
 export default function LoginScreen() {
@@ -38,7 +38,7 @@ export default function LoginScreen() {
   useEffect(() => {
     async function checkPendingReferral() {
       if (!referralCode) {
-        const pending = await getPendingReferralCode();
+        const pending = await detectAndSaveLaunchReferral();
         if (pending) {
           setReferralCode(pending);
           setMode('signup');

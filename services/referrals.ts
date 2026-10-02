@@ -2,11 +2,11 @@
  * Referral & Invite Service
  *
  * Handles referral code generation, native share sheet triggers,
- * deep link generation (drivetrack.app/i/{code}), persistence of pending invite codes,
+ * deep link generation (${APP_BASE_URL}/i/{code}), persistence of pending invite codes,
  * and server attribution via Supabase RPC.
  */
 
-import { Share, Platform } from 'react-native';
+import { Share, Platform, Linking } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { supabase } from '@/lib/supabase';
 
@@ -15,7 +15,15 @@ import { supabase } from '@/lib/supabase';
 // ---------------------------------------------------------------------------
 
 const PENDING_REFERRAL_KEY = 'slipstream_pending_referral_code';
-export const REFERRAL_DOMAIN = 'drivetrack.app';
+
+// Configurable base URL: EXPO_PUBLIC_APP_URL -> NEXT_PUBLIC_APP_URL -> Vercel fallback
+export const APP_BASE_URL = (
+  process.env.EXPO_PUBLIC_APP_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  'https://slipstream-app.vercel.app'
+).replace(/\/+$/, '');
+
+export const APP_DOMAIN = APP_BASE_URL.replace(/^https?:\/\//, '');
 
 export interface ReferralStats {
   referralCode: string;
@@ -58,19 +66,91 @@ export async function clearPendingReferralCode(): Promise<void> {
   }
 }
 
+/**
+ * Parses a deep link, universal link, or store referrer parameter to extract an invite code.
+ */
+export function extractReferralFromUrl(url: string): string | null {
+  try {
+    // Check path /i/CODE
+    const pathMatch = url.match(/\/i\/([a-zA-Z0-9_-]+)/i);
+    if (pathMatch && pathMatch[1]) {
+      return pathMatch[1].trim().toUpperCase();
+    }
+
+    // Check query params: referrer=invite_CODE or referralCode=CODE
+    const queryIdx = url.indexOf('?');
+    if (queryIdx !== -1) {
+      const query = url.substring(queryIdx + 1);
+      const params = new URLSearchParams(query);
+
+      const referrer = params.get('referrer');
+      if (referrer) {
+        const inviteMatch = referrer.match(/invite_([a-zA-Z0-9_-]+)/i);
+        if (inviteMatch && inviteMatch[1]) {
+          return inviteMatch[1].trim().toUpperCase();
+        }
+      }
+
+      const refCode = params.get('referralCode') || params.get('ref') || params.get('code');
+      if (refCode) {
+        return refCode.trim().toUpperCase();
+      }
+    }
+  } catch {
+    // Malformed URL
+  }
+  return null;
+}
+
+/**
+ * Detects referral codes from initial launch URL (deep link, universal link, or store referrer parameter)
+ * or web cookies, and saves it into pending referral storage.
+ */
+export async function detectAndSaveLaunchReferral(): Promise<string | null> {
+  // 1. Check if already saved in SecureStore
+  const existing = await getPendingReferralCode();
+  if (existing) return existing;
+
+  // 2. Check web cookies if running on web
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const match = document.cookie.match(/slipstream_invite_code=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      const code = match[1].trim().toUpperCase();
+      await savePendingReferralCode(code);
+      return code;
+    }
+  }
+
+  // 3. Inspect initial launch URL
+  try {
+    const initialUrl = await Linking.getInitialURL();
+    if (initialUrl) {
+      const parsedCode = extractReferralFromUrl(initialUrl);
+      if (parsedCode) {
+        await savePendingReferralCode(parsedCode);
+        return parsedCode;
+      }
+    }
+  } catch (err) {
+    console.warn('[Referrals] Error checking initial URL:', err);
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Link & Share Helpers
 // ---------------------------------------------------------------------------
 
 export function getReferralDeepLink(code: string): string {
   const clean = code.trim().toUpperCase();
-  return `https://${REFERRAL_DOMAIN}/i/${clean}`;
+  return `${APP_BASE_URL}/i/${clean}`;
 }
 
 export async function shareReferralInvite(code: string): Promise<boolean> {
   const clean = code.trim().toUpperCase();
   const link = getReferralDeepLink(clean);
-  const message = `Join me on Slipstream — precision telemetry, drag timer & live radar alerts. Use my driver invite link to get started: ${link}`;
+  const message = `Join me on Slipstream: precision telemetry, drag timer & live radar alerts. Use my driver invite link to get started: ${link}`;
 
   try {
     const result = await Share.share(

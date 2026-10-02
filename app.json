@@ -51,6 +51,11 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.slipstream.app",
+      "associatedDomains": [
+        "applinks:slipstream-app.vercel.app",
+        "applinks:slipstream.app",
+        "applinks:www.slipstream.app"
+      ],
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Slipstream records your trip route and detects radar zones. Location runs in the background so recording continues when the screen is off.",
         "NSLocationWhenInUsePermission": "Slipstream uses your location to display your map position and record trips.",
@@ -67,6 +72,46 @@
         "backgroundColor": "#080B14",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "slipstream-app.vercel.app",
+              "pathPrefix": "/i"
+            },
+            {
+              "scheme": "https",
+              "host": "slipstream.app",
+              "pathPrefix": "/i"
+            },
+            {
+              "scheme": "https",
+              "host": "www.slipstream.app",
+              "pathPrefix": "/i"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "slipstream",
+              "host": "i"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",

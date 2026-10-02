@@ -26,6 +26,7 @@ import { startOfflineSync, stopOfflineSync } from '@/services/offlineQueue';
 import { OfflineSyncBanner } from '@/components/ui/OfflineSyncBanner';
 import { useOtaUpdates } from '@/lib/updates';
 import { OtaUpdateBanner } from '@/components/ui/OtaUpdateBanner';
+import { detectAndSaveLaunchReferral } from '@/services/referrals';
 
 // Prevent native splash screen from autohiding before resources/session ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -58,6 +59,7 @@ function RootNavigation() {
 
   useEffect(() => {
     startOfflineSync();
+    detectAndSaveLaunchReferral().catch(() => {});
     return () => {
       stopOfflineSync();
     };
