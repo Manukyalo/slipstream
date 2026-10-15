@@ -267,7 +267,7 @@ The following catalog lists all open issues and items classified by severity pri
 
 | Platform | Profile | Build ID | EAS Dashboard URL | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Android (AAB)** | `production` | `125e69aa-988a-4b33-bf25-8221206ac284` | [View Android Build](https://expo.dev/accounts/manukyalo/projects/slipstream/builds/125e69aa-988a-4b33-bf25-8221206ac284) | Building on EAS |
+| **Android (AAB)** | `production` | `35a8f874-74a2-4e47-a494-142b5c575bad` | [View Build](https://expo.dev/accounts/manukyalo/projects/slipstream/builds/35a8f874-74a2-4e47-a494-142b5c575bad) &middot; [Download AAB](https://expo.dev/artifacts/eas/qJDEgJB_-5aSiKq-sPuZdSadFE3ZHmIkrKFbh0MCRS4.aab) | **PASSED** (Ready for Play Console) |
 | **iOS (IPA)** | `production` | Pending Credentials | Run `npx eas-cli credentials` to link Apple Dev account | Pending |
 
 ### Cloud EAS Build Commands
