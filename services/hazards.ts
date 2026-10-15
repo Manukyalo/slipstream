@@ -15,26 +15,29 @@ export interface NearbyHazard {
   expires_at: string;
 }
 
+import type { IconName } from '@/components/ui/Icon';
+import { Colors } from '@/constants/theme';
+
 export const HAZARD_CONFIG: Record<
   HazardType,
-  { label: string; icon: string; color: string; description: string }
+  { label: string; icon: IconName; color: string; description: string }
 > = {
   speed_trap: {
     label: 'Speed Trap',
-    icon: '⚡',
-    color: '#FF6B35',
+    icon: 'lightning',
+    color: Colors.semantic.warning,
     description: 'Radar speed trap spotted',
   },
   camera: {
     label: 'Speed Camera',
-    icon: '📷',
-    color: '#00D4FF',
+    icon: 'camera',
+    color: Colors.accent.cyan,
     description: 'Automated enforcement camera',
   },
   police: {
     label: 'Police Presence',
-    icon: '🚓',
-    color: '#EF4444',
+    icon: 'seal-check',
+    color: Colors.semantic.danger,
     description: 'Active highway patrol vehicle',
   },
 };

@@ -7,24 +7,23 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Camera, ChevronRight, Shield, X, Zap } from 'lucide-react-native';
-import type { LucideIcon } from 'lucide-react-native';
-import { Theme } from '@/constants/theme';
+import { Icon, type IconName } from '@/components/ui/Icon';
+import { Colors, Theme } from '@/constants/theme';
 import { Spacing } from '@/constants/design';
 import { HAZARD_CONFIG, type HazardType } from '@/services/hazards';
 
-// Map hazard types to Lucide icons — keeps HAZARD_CONFIG clean for other consumers
-const HAZARD_ICONS: Record<HazardType, LucideIcon> = {
-  speed_trap: Zap,
-  camera: Camera,
-  police: Shield,
+// Map hazard types to Phosphor icon names
+const HAZARD_ICONS: Record<HazardType, IconName> = {
+  speed_trap: 'lightning',
+  camera: 'camera',
+  police: 'shield',
 };
 
-// Accent colors per type (from HAZARD_CONFIG, avoids drift)
+// Accent colors per type (amber, cyan, danger)
 const HAZARD_ACCENT_COLORS: Record<HazardType, string> = {
-  speed_trap: Theme.colors.ignitionAmber,
-  camera: Theme.colors.signalCyan,
-  police: Theme.colors.flagRed,
+  speed_trap: Colors.semantic.warning,
+  camera: Colors.accent.cyan,
+  police: Colors.semantic.danger,
 };
 
 interface HazardReportModalProps {
@@ -82,7 +81,7 @@ export function HazardReportModal({
               accessibilityLabel="Close"
               accessibilityRole="button"
             >
-              <X size={14} strokeWidth={2} color={Theme.colors.textMuted} />
+              <Icon name="close" size={16} color={Colors.text.secondary} />
             </Pressable>
           </View>
 
@@ -90,7 +89,7 @@ export function HazardReportModal({
           <View style={styles.optionsList}>
             {types.map((t, idx) => {
               const cfg = HAZARD_CONFIG[t];
-              const Icon = HAZARD_ICONS[t];
+              const iconName = HAZARD_ICONS[t];
               const accent = HAZARD_ACCENT_COLORS[t];
               const isSubmitting = submittingType === t;
               const isLast = idx === types.length - 1;
@@ -110,7 +109,7 @@ export function HazardReportModal({
                 >
                   {/* Icon container */}
                   <View style={[styles.iconWrap, { backgroundColor: accent + '18' }]}>
-                    <Icon size={18} strokeWidth={1.5} color={accent} />
+                    <Icon name={iconName} size={18} color={accent} weight="duotone" />
                   </View>
 
                   {/* Text */}
@@ -123,7 +122,7 @@ export function HazardReportModal({
                   {isSubmitting ? (
                     <ActivityIndicator size="small" color={accent} />
                   ) : (
-                    <ChevronRight size={16} strokeWidth={1.5} color={Theme.colors.textMuted} />
+                    <Icon name="caret-right" size={16} color={Colors.text.secondary} />
                   )}
                 </Pressable>
               );

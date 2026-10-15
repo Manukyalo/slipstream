@@ -248,7 +248,7 @@ serve(async (req: Request) => {
     <text x="170" y="34" font-family="'Space Grotesk', sans-serif" font-weight="800" font-size="20" fill="#00D4FF" letter-spacing="3" text-anchor="middle">${headline.toUpperCase()}</text>
 
     <!-- Vehicle Name -->
-    <text x="0" y="120" font-family="'Space Grotesk', sans-serif" font-weight="700" font-size="38" fill="#EDF1FB" letter-spacing="1">🏎️ ${vehicleName.toUpperCase()}</text>
+    <text x="0" y="120" font-family="'Space Grotesk', sans-serif" font-weight="700" font-size="38" fill="#EDF1FB" letter-spacing="1">${vehicleName.toUpperCase()}</text>
   </g>
 
   <!-- Primary Giant Hero Metric Display -->

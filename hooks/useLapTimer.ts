@@ -11,8 +11,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import {
   CROSSING_RADIUS_METERS,
+  detectSegmentCrossing,
   formatLapTime,
   isCrossingGate,
   saveLap,
@@ -48,9 +50,38 @@ export interface UseLapTimerOptions {
   isActive: boolean; // caller controls session on/off
 }
 
-const TIMER_INTERVAL_MS = 200; // 5 Hz — smooth enough without draining battery
+const TIMER_INTERVAL_MS = 100; // 10 Hz — smooth high-precision display
 /** After crossing, ignore re-trigger for this many ms */
-const CROSSING_COOLDOWN_MS = 8_000;
+const CROSSING_COOLDOWN_MS = 10_000;
+/** Minimum lap time to prevent double-triggering on hairpins near gate */
+const MIN_LAP_TIME_MS = 15_000;
+
+/**
+ * Triggers audio tone and haptic feedback on line crossing
+ */
+function playCrossingFeedback() {
+  try {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  } catch {}
+
+  try {
+    if (typeof window !== 'undefined' && 'AudioContext' in window) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.16);
+    }
+  } catch {}
+}
 
 export function useLapTimer({
   track,
@@ -70,14 +101,15 @@ export function useLapTimer({
   });
 
   // Refs so the interval closure always has fresh values
-  const lapStartRef      = useRef<number | null>(null);
-  const sectorStartRef   = useRef<number | null>(null);
+  const lapStartRef       = useRef<number | null>(null);
+  const sectorStartRef    = useRef<number | null>(null);
   const pendingSectorsRef = useRef<SectorSplit[]>([]);
-  const pathPointsRef    = useRef<TrackPoint[]>([]);
-  const lastCrossingRef  = useRef<number>(0);
-  const completedLapsRef = useRef<Lap[]>([]);
-  const bestLapMsRef     = useRef<number | null>(null);
-  const hasStartedRef    = useRef(false);
+  const pathPointsRef     = useRef<TrackPoint[]>([]);
+  const lastCrossingRef   = useRef<number>(0);
+  const completedLapsRef  = useRef<Lap[]>([]);
+  const bestLapMsRef      = useRef<number | null>(null);
+  const hasStartedRef     = useRef(false);
+  const prevGpsRef        = useRef<{ lat: number; lon: number; time: number } | null>(null);
 
   // ── Timer tick ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -97,38 +129,66 @@ export function useLapTimer({
     if (!isActive || !track || currentLat === null || currentLon === null) return;
 
     const now = Date.now();
-    const cooldownOk = now - lastCrossingRef.current > CROSSING_COOLDOWN_MS;
-    if (!cooldownOk) return;
+    const prev = prevGpsRef.current;
+    prevGpsRef.current = { lat: currentLat, lon: currentLon, time: now };
 
     // Append to path
     pathPointsRef.current.push({
-      lat: currentLat, lon: currentLon,
+      lat: currentLat,
+      lon: currentLon,
       heading: currentHeading ?? undefined,
     });
 
-    // ── Check start/finish crossing ──────────────────────────────────────
+    // Check cooldown to prevent multiple triggers in gate vicinity
+    const cooldownOk = now - lastCrossingRef.current > CROSSING_COOLDOWN_MS;
+    if (!cooldownOk) return;
+
+    // ── Check start/finish crossing with GPS interpolation ───────────────
     const sfp = track.startFinishPoint;
-    const crossed = isCrossingGate({
-      currentLat,
-      currentLon,
-      currentHeading,
-      gateLat: sfp.lat,
-      gateLon: sfp.lon,
-      gateHeading: track.startFinishHeading ?? null,
-    });
+    let crossed = false;
+    let fraction = 1;
+
+    if (prev) {
+      const segResult = detectSegmentCrossing({
+        prevLat: prev.lat,
+        prevLon: prev.lon,
+        currLat: currentLat,
+        currLon: currentLon,
+        currHeading: currentHeading,
+        gateLat: sfp.lat,
+        gateLon: sfp.lon,
+        gateHeading: track.startFinishHeading ?? null,
+      });
+      crossed = segResult.crossed;
+      fraction = segResult.fraction;
+    } else {
+      crossed = isCrossingGate({
+        currentLat,
+        currentLon,
+        currentHeading,
+        gateLat: sfp.lat,
+        gateLon: sfp.lon,
+        gateHeading: track.startFinishHeading ?? null,
+      });
+    }
 
     if (crossed) {
-      lastCrossingRef.current = now;
+      // Calculate precise interpolated crossing timestamp
+      const crossingTime = prev ? Math.round(prev.time + fraction * (now - prev.time)) : now;
 
       if (!hasStartedRef.current) {
-        // First crossing — start the timer
+        // First crossing — start the timer session
         hasStartedRef.current = true;
-        lapStartRef.current = now;
-        sectorStartRef.current = now;
+        lastCrossingRef.current = crossingTime;
+        lapStartRef.current = crossingTime;
+        sectorStartRef.current = crossingTime;
         pendingSectorsRef.current = [];
         pathPointsRef.current = [];
-        setState((prev) => ({
-          ...prev,
+
+        playCrossingFeedback();
+
+        setState((prevSt) => ({
+          ...prevSt,
           hasStarted: true,
           isRunning: true,
           currentLapMs: 0,
@@ -137,10 +197,14 @@ export function useLapTimer({
         return;
       }
 
-      // Subsequent crossing — complete the lap
-      const lapMs = now - (lapStartRef.current ?? now);
-      completeLap(lapMs, now);
-      return;
+      // Subsequent crossing — complete lap if lap duration >= MIN_LAP_TIME_MS
+      const lapMs = crossingTime - (lapStartRef.current ?? crossingTime);
+      if (lapMs >= MIN_LAP_TIME_MS) {
+        lastCrossingRef.current = crossingTime;
+        playCrossingFeedback();
+        completeLap(lapMs, crossingTime);
+        return;
+      }
     }
 
     // ── Check sector crossings ───────────────────────────────────────────
@@ -150,23 +214,40 @@ export function useLapTimer({
     if (nextSectorIdx >= track.sectorPoints.length) return;
 
     const sectorPoint = track.sectorPoints[nextSectorIdx];
-    const sectorCrossed = isCrossingGate({
-      currentLat,
-      currentLon,
-      currentHeading,
-      gateLat: sectorPoint.lat,
-      gateLon: sectorPoint.lon,
-      gateHeading: sectorPoint.heading ?? null,
-    });
+    let sectorCrossed = false;
+
+    if (prev) {
+      const segSec = detectSegmentCrossing({
+        prevLat: prev.lat,
+        prevLon: prev.lon,
+        currLat: currentLat,
+        currLon: currentLon,
+        currHeading: currentHeading,
+        gateLat: sectorPoint.lat,
+        gateLon: sectorPoint.lon,
+        gateHeading: sectorPoint.heading ?? null,
+      });
+      sectorCrossed = segSec.crossed;
+    } else {
+      sectorCrossed = isCrossingGate({
+        currentLat,
+        currentLon,
+        currentHeading,
+        gateLat: sectorPoint.lat,
+        gateLon: sectorPoint.lon,
+        gateHeading: sectorPoint.heading ?? null,
+      });
+    }
 
     if (sectorCrossed) {
       lastCrossingRef.current = now;
+      playCrossingFeedback();
       const splitMs = now - (sectorStartRef.current ?? now);
       sectorStartRef.current = now;
       const split: SectorSplit = { sectorIndex: nextSectorIdx, splitMs };
       pendingSectorsRef.current = [...pendingSectorsRef.current, split];
-      setState((prev) => ({
-        ...prev,
+      setState((prevSt) => ({
+        ...prevSt,
         pendingSectors: [...pendingSectorsRef.current],
       }));
     }

@@ -25,7 +25,7 @@ export function SplitTimeCard({ distanceType, split, targetMeters }: SplitTimeCa
 
         {isCompleted && (
           <View style={styles.savedChip}>
-            <Text style={styles.savedText}>SAVED ✓</Text>
+            <Text style={styles.savedText}>SAVED</Text>
           </View>
         )}
       </View>

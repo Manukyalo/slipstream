@@ -2,6 +2,8 @@
  * Telemetry Math and Geospatial Utilities
  */
 
+import type { FeatureCollection, LineString } from 'geojson';
+
 export interface GpsSample {
   latitude: number;
   longitude: number;
@@ -58,7 +60,7 @@ export function samplesToLineStringWkt(samples: GpsSample[]): string | null {
 }
 
 /** Convert samples to GeoJSON Feature<LineString> for MapLibre live rendering */
-export function samplesToGeoJsonLine(samples: GpsSample[]): GeoJSON.FeatureCollection<GeoJSON.LineString> {
+export function samplesToGeoJsonLine(samples: GpsSample[]): FeatureCollection<LineString> {
   if (samples.length < 2) {
     return {
       type: 'FeatureCollection',

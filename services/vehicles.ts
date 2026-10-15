@@ -67,6 +67,7 @@ export interface CreateVehicleInput {
   make: string;
   model: string;
   year: number;
+  odometer?: number;
   nickname?: string | null;
   isPrimary?: boolean;
   localPhotoUri?: string | null;
@@ -78,7 +79,7 @@ export interface CreateVehicleInput {
  * unsets primary on all other vehicles for this user first.
  */
 export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle> {
-  const { userId, make, model, year, nickname, isPrimary, localPhotoUri } = input;
+  const { userId, make, model, year, odometer = 0, nickname, isPrimary, localPhotoUri } = input;
 
   // Check if user has any existing vehicles
   const existingVehicles = await fetchUserVehicles(userId);
@@ -102,6 +103,7 @@ export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle>
     make,
     model,
     year,
+    odometer: Math.max(0, Math.round(odometer)),
     nickname: nickname?.trim() || null,
     is_primary: shouldBePrimary,
     photo_url: null,
@@ -245,3 +247,156 @@ export async function uploadVehiclePhoto(
 
   return photoUrl;
 }
+
+/**
+ * Update a vehicle's odometer mileage.
+ */
+export async function updateVehicleOdometer(
+  userId: string,
+  vehicleId: string,
+  odometerKm: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from('vehicles')
+    .update({ odometer: Math.max(0, Math.round(odometerKm)) })
+    .eq('id', vehicleId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('[VehicleService] Failed to update vehicle odometer:', error.message);
+    throw new Error(`Failed to update odometer: ${error.message}`);
+  }
+}
+
+/**
+ * Fetch trips belonging to user that currently have no vehicle attached.
+ */
+export async function fetchUnassignedTrips(userId: string) {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('id, distance_m, duration_s, started_at, top_speed, avg_speed')
+    .eq('user_id', userId)
+    .is('vehicle_id', null)
+    .order('started_at', { ascending: false });
+
+  if (error) {
+    console.warn('[VehicleService] Failed to fetch unassigned trips:', error.message);
+    return [];
+  }
+
+  return data ?? [];
+}
+
+/**
+ * Attach unassigned drives (or specific trips) to a vehicle using database RPC.
+ */
+export async function attachDrivesToVehicle(
+  vehicleId: string,
+  tripIds?: string[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('attach_drives_to_vehicle', {
+    p_vehicle_id: vehicleId,
+    p_trip_ids: tripIds ?? undefined,
+  });
+
+  if (error) {
+    console.error('[VehicleService] Failed to attach drives to vehicle:', error.message);
+    throw new Error(`Failed to attach drives: ${error.message}`);
+  }
+
+  return data ?? 0;
+}
+
+/**
+ * Levenshtein distance string similarity metric (0.0 to 1.0).
+ */
+export function stringSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+  const s2 = str2.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+
+  if (s1 === s2) return 1.0;
+  if (!s1 || !s2) return 0.0;
+  if (s1.includes(s2) || s2.includes(s1)) return 0.85;
+
+  const matrix: number[][] = [];
+  for (let i = 0; i <= s1.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= s2.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  const distance = matrix[s1.length][s2.length];
+  const maxLen = Math.max(s1.length, s2.length);
+  return 1 - distance / maxLen;
+}
+
+export interface DuplicateCheckResult {
+  isDuplicate: boolean;
+  match?: {
+    make: string;
+    model: string;
+    confidence: number;
+  };
+}
+
+/**
+ * Fuzzy check candidate make & model against catalogue to prevent duplicate entries.
+ */
+export async function checkVehicleDuplicate(
+  candidateMake: string,
+  candidateModel: string,
+): Promise<DuplicateCheckResult> {
+  try {
+    const makes = await fetchMakes();
+    const cleanMake = candidateMake.trim();
+    const cleanModel = candidateModel.trim();
+
+    // 1. Find best matching make
+    let bestMakeMatch: { make: VehicleMake; score: number } | null = null;
+    for (const m of makes) {
+      const score = stringSimilarity(cleanMake, m.name);
+      if (score >= 0.72 && (!bestMakeMatch || score > bestMakeMatch.score)) {
+        bestMakeMatch = { make: m, score };
+      }
+    }
+
+    if (!bestMakeMatch) {
+      return { isDuplicate: false };
+    }
+
+    // 2. Fetch models for matched make
+    const models = await fetchModels(bestMakeMatch.make.id);
+    let bestModelMatch: { model: VehicleModel; score: number } | null = null;
+    for (const mod of models) {
+      const score = stringSimilarity(cleanModel, mod.name);
+      if (score >= 0.7 && (!bestModelMatch || score > bestModelMatch.score)) {
+        bestModelMatch = { model: mod, score };
+      }
+    }
+
+    if (bestModelMatch) {
+      return {
+        isDuplicate: true,
+        match: {
+          make: bestMakeMatch.make.name,
+          model: bestModelMatch.model.name,
+          confidence: Math.round((bestMakeMatch.score + bestModelMatch.score) * 50),
+        },
+      };
+    }
+
+    return { isDuplicate: false };
+  } catch (err) {
+    console.warn('[VehicleService] Duplicate check skipped due to error:', err);
+    return { isDuplicate: false };
+  }
+}
+

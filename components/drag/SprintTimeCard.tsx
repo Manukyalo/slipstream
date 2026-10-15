@@ -25,7 +25,7 @@ export function SprintTimeCard({ sprintType, sprint }: SprintTimeCardProps) {
 
         {isCompleted && (
           <View style={styles.savedChip}>
-            <Text style={styles.savedText}>RECORDED ✓</Text>
+            <Text style={styles.savedText}>RECORDED</Text>
           </View>
         )}
       </View>

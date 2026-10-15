@@ -1,82 +1,270 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Pressable } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+/**
+ * Recap Screen — Recorded sessions & telemetry
+ *
+ * Lists all trips in reverse chronological order.
+ * Each card shows date, distance, peak and avg speed, duration,
+ * and a "Share Story Card" button that opens the on-device ShareRecapModal.
+ */
+
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  Pressable,
+} from 'react-native';
+import { router } from 'expo-router';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { Text } from '@/components/ui/Text';
+import { Icon } from '@/components/ui/Icon';
 import { SkeletonCard } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
 import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
-import { type GenerateRecapCardParams } from '@/services/shareCard';
-import { supabase } from '@/lib/supabase';
-import { Trip } from '@/types/database';
+import { useAuth } from '@/contexts/AuthContext';
+import { useVehicles } from '@/hooks/useVehicles';
+import { fetchRecentTrips } from '@/services/trips';
+import { toUserMessage } from '@/utils/toUserMessage';
+import type { Trip } from '@/types/database';
+import type { GenerateRecapCardParams } from '@/services/shareCard';
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return `${h}h ${rem}m`;
+}
+
+function formatDate(isoString: string): string {
+  const d = new Date(isoString);
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+interface TripCardProps {
+  trip: Trip;
+  onShare: () => void;
+}
+
+function TripCard({ trip, onShare }: TripCardProps) {
+  const distKm = (Number(trip.distance_m) / 1000).toFixed(2);
+  const topSpeed = Math.round(Number(trip.top_speed));
+  const avgSpeed = Math.round(Number(trip.avg_speed));
+
+  return (
+    <View style={cardStyles.card}>
+      {/* Header */}
+      <View style={cardStyles.header}>
+        <View style={cardStyles.dateWrap}>
+          <Icon name="flag" size={14} color={Colors.text.tertiary} />
+          <Text variant="label" color={Colors.text.primary}>
+            {formatDate(trip.started_at)}
+          </Text>
+        </View>
+        <View style={cardStyles.durationBadge}>
+          <Text variant="overline" color={Colors.accent.cyan}>
+            {formatDuration(trip.duration_s)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Metrics */}
+      <View style={cardStyles.metrics}>
+        <View style={cardStyles.metricItem}>
+          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
+            {distKm}
+          </Text>
+          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
+            KM
+          </Text>
+        </View>
+        <View style={cardStyles.divider} />
+        <View style={cardStyles.metricItem}>
+          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
+            {topSpeed}
+          </Text>
+          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
+            PEAK KM/H
+          </Text>
+        </View>
+        <View style={cardStyles.divider} />
+        <View style={cardStyles.metricItem}>
+          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
+            {avgSpeed}
+          </Text>
+          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
+            AVG KM/H
+          </Text>
+        </View>
+      </View>
+
+      {/* Share button */}
+      <Pressable
+        style={({ pressed }) => [cardStyles.shareBtn, pressed && cardStyles.btnPressed]}
+        onPress={onShare}
+      >
+        <Icon name="share" size={14} color={Colors.accent.cyan} />
+        <Text variant="overline" color={Colors.accent.cyan}>
+          SHARE STORY CARD
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const cardStyles = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    padding: Spacing.card,
+    gap: Spacing.gap,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[1],
+  },
+  durationBadge: {
+    backgroundColor: 'rgba(34,211,238,0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(34,211,238,0.25)',
+  },
+  metrics: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface['2'],
+    borderRadius: Radius.iconChip,
+    paddingVertical: Spacing[3],
+    paddingHorizontal: Spacing[2],
+  },
+  metricItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  metricValue: {
+    fontSize: 26,
+    lineHeight: 30,
+  },
+  metricUnit: {
+    marginTop: 2,
+  },
+  divider: {
+    width: 1,
+    height: 32,
+    backgroundColor: Colors.hairline,
+  },
+  shareBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing[2],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    borderRadius: Radius.button,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(34,211,238,0.06)',
+  },
+  btnPressed: {
+    opacity: 0.75,
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function RecapScreen() {
+  const { user, profile } = useAuth();
+  const { primaryVehicle } = useVehicles();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
-  const fetchTrips = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('trips')
-        .select('*')
-        .order('started_at', { ascending: false });
+  useEffect(() => {
+    let active = true;
+    fetchRecentTrips(50)
+      .then((data) => {
+        if (active) {
+          setTrips(data);
+          setErrorMsg(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setErrorMsg(toUserMessage(err));
+          setLoading(false);
+        }
+      });
 
-      if (error) {
-        console.warn('[Recap] Error fetching trips:', error.message);
-      } else if (data) {
-        setTrips(data);
-      }
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await fetchRecentTrips(50);
+      setTrips(data);
+      setErrorMsg(null);
+    } catch (err) {
+      setErrorMsg(toUserMessage(err));
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchTrips();
-  }, [fetchTrips]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchTrips();
-  };
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}m ${secs}s`;
-  };
-
-  const formatDate = (isoString: string) => {
-    const d = new Date(isoString);
-    return d.toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const handle = profile?.display_name || user?.email?.split('@')[0] || 'pilot';
+  const vehicleLabel = primaryVehicle
+    ? `${primaryVehicle.make} ${primaryVehicle.model}`.trim()
+    : 'Slipstream Vehicle';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Recap</Text>
-        <Text style={styles.subtitle}>Recorded Driving Sessions & Telemetry</Text>
-      </View>
-
+    <ScreenContainer title="Recap">
       {loading ? (
-        <View style={styles.skeletonContainer}>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+        <View style={styles.skeletonWrap}>
+          {[0, 1, 2, 3].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
         </View>
+      ) : errorMsg && trips.length === 0 ? (
+        <ErrorState message={errorMsg} onRetry={onRefresh} style={styles.stateWrap} />
       ) : trips.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>NO TRIPS RECORDED</Text>
-          <Text style={styles.emptyBody}>
-            Switch to the Track tab and hit Start Tracking to record your first session.
-          </Text>
-        </View>
+        <EmptyState
+          icon="flag"
+          iconColor="cyan"
+          title="No trips recorded"
+          description="Start driving to record telemetry, calculate speed metrics, and build your recap."
+          action={{
+            label: 'Start Tracking',
+            onPress: () => router.push('/(tabs)/track'),
+          }}
+          style={styles.stateWrap}
+        />
       ) : (
         <FlatList
           data={trips}
@@ -85,54 +273,28 @@ export default function RecapScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={Colors.accentCyan}
+              tintColor={Colors.accent.cyan}
             />
           }
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <View style={styles.tripCard}>
-              <View style={styles.tripCardHeader}>
-                <Text style={styles.tripDate}>{formatDate(item.started_at)}</Text>
-                <View style={styles.durationBadge}>
-                  <Text style={styles.durationText}>{formatDuration(item.duration_s)}</Text>
-                </View>
-              </View>
-
-              <View style={styles.metricsGrid}>
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricValue}>
-                    {(Number(item.distance_m) / 1000).toFixed(2)}
-                  </Text>
-                  <Text style={styles.metricUnit}>KM</Text>
-                </View>
-
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricValue}>{Math.round(Number(item.top_speed))}</Text>
-                  <Text style={styles.metricUnit}>PEAK KM/H</Text>
-                </View>
-
-                <View style={styles.metricItem}>
-                  <Text style={styles.metricValue}>{Math.round(Number(item.avg_speed))}</Text>
-                  <Text style={styles.metricUnit}>AVG KM/H</Text>
-                </View>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [styles.shareCardBtn, pressed && styles.btnPressed]}
-                onPress={() =>
-                  setShareParams({
-                    type: 'trip',
-                    id: item.id,
-                    headline: 'SLIPSTREAM TELEMETRY RUN',
-                    topSpeedKmh: Number(item.top_speed),
-                    distanceMeters: Number(item.distance_m),
-                    durationSeconds: item.duration_s,
-                  })
-                }
-              >
-                <Text style={styles.shareCardBtnText}>📸 SHARE STORY CARD</Text>
-              </Pressable>
-            </View>
+            <TripCard
+              trip={item}
+              onShare={() =>
+                setShareParams({
+                  type: 'trip',
+                  id: item.id,
+                  userHandle: handle,
+                  vehicleName: vehicleLabel,
+                  country: 'Kenya',
+                  topSpeedKmh: Number(item.top_speed),
+                  avgSpeedKmh: Number(item.avg_speed),
+                  distanceMeters: Number(item.distance_m),
+                  durationSeconds: item.duration_s,
+                })
+              }
+            />
           )}
         />
       )}
@@ -140,132 +302,45 @@ export default function RecapScreen() {
       <ShareRecapModal
         visible={!!shareParams}
         params={shareParams}
+        userHandle={handle}
+        vehicleName={vehicleLabel}
+        country="Kenya"
         onClose={() => setShareParams(null)}
       />
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  skeletonWrap: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.gap,
+    gap: Spacing.gap,
+  },
+  stateWrap: {
     flex: 1,
-    backgroundColor: Colors.bgBase,
-    paddingTop: 60,
-    paddingHorizontal: Spacing.base,
-  },
-  header: {
-    marginBottom: Spacing.xl,
-  },
-  title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h1,
-    color: Colors.textPrimary,
-  },
-  subtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  skeletonContainer: {
-    gap: Spacing.md,
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[10],
   },
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-    marginTop: 80,
+    paddingHorizontal: Spacing.screen * 2,
+    gap: Spacing[4],
   },
   emptyTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textSecondary,
-    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   emptyBody: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textMuted,
     textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
+    lineHeight: 24,
+    color: Colors.text.tertiary,
   },
   listContent: {
-    paddingBottom: Spacing['2xl'],
-    gap: Spacing.md,
-  },
-  tripCard: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: 16,
-    padding: Spacing.base,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tripCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderSubtle,
-    paddingBottom: Spacing.sm,
-  },
-  tripDate: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.textPrimary,
-  },
-  durationBadge: {
-    backgroundColor: Colors.bgElevated,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  durationText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
-  },
-  metricsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  metricItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  metricValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  metricUnit: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 9,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-    marginTop: 2,
-  },
-  shareCardBtn: {
-    marginTop: Spacing.md,
-    backgroundColor: Colors.accentCyanDim,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.accentCyan,
-    alignItems: 'center',
-  },
-  shareCardBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
-    letterSpacing: 0.5,
-  },
-  btnPressed: {
-    opacity: 0.8,
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing.gap,
+    paddingBottom: 40,
+    gap: Spacing.gap,
   },
 });

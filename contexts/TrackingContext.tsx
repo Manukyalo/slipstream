@@ -12,6 +12,7 @@ import {
   msToKmh,
   samplesToGeoJsonLine,
 } from '@/utils/telemetry';
+import type { FeatureCollection, LineString } from 'geojson';
 
 export const LOCATION_TRACKING_TASK = 'SLIPSTREAM_BACKGROUND_LOCATION_TASK';
 
@@ -51,8 +52,11 @@ interface TrackingContextValue {
   elapsedSeconds: number;
   distanceMeters: number;
   samples: GpsSample[];
-  routeGeoJson: GeoJSON.FeatureCollection<GeoJSON.LineString>;
+  routeGeoJson: FeatureCollection<LineString>;
   currentCoords: [number, number] | null;
+  gpsAccuracy: number | null;
+  heading: number | null;
+  isSaving: boolean;
   startTracking: () => Promise<void>;
   stopTracking: () => Promise<TripMetrics | null>;
   permissionGranted: boolean;
@@ -70,11 +74,15 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [distanceMeters, setDistanceMeters] = useState(0);
   const [samples, setSamples] = useState<GpsSample[]>([]);
   const [currentCoords, setCurrentCoords] = useState<[number, number] | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [heading, setHeading] = useState<number | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
 
   const startTimeRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const foregroundSubRef = useRef<Location.LocationSubscription | null>(null);
+  const idleSubRef = useRef<Location.LocationSubscription | null>(null);
 
   // Check initial permissions and initial location fix
   const requestPermissions = useCallback(async (): Promise<boolean> => {
@@ -89,12 +97,16 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const granted = fgStatus === 'granted';
       setPermissionGranted(granted);
 
-      // Get initial position for map camera
+      // Get initial position for map camera & initial accuracy
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
       if (current) {
         setCurrentCoords([current.coords.longitude, current.coords.latitude]);
+        setGpsAccuracy(current.coords.accuracy ?? null);
+        if (current.coords.heading != null && current.coords.heading >= 0) {
+          setHeading(current.coords.heading);
+        }
       }
 
       return bgStatus === 'granted';
@@ -107,6 +119,42 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     requestPermissions();
   }, [requestPermissions]);
+
+  // Idle position subscription when permission is granted and not recording
+  useEffect(() => {
+    let isMounted = true;
+    if (permissionGranted && !isTracking) {
+      Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 1500,
+          distanceInterval: 2,
+        },
+        (loc) => {
+          if (!isMounted) return;
+          setCurrentCoords([loc.coords.longitude, loc.coords.latitude]);
+          setGpsAccuracy(loc.coords.accuracy ?? null);
+          if (loc.coords.heading != null && loc.coords.heading >= 0) {
+            setHeading(loc.coords.heading);
+          }
+        },
+      ).then((sub) => {
+        if (!isMounted) {
+          sub.remove();
+        } else {
+          idleSubRef.current = sub;
+        }
+      }).catch((e) => console.warn('[TrackingContext] Idle watch error:', e));
+    }
+
+    return () => {
+      isMounted = false;
+      if (idleSubRef.current) {
+        idleSubRef.current.remove();
+        idleSubRef.current = null;
+      }
+    };
+  }, [permissionGranted, isTracking]);
 
   // Handle incoming live GPS sample
   const handleNewSample = useCallback((sample: GpsSample) => {
@@ -132,6 +180,11 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // Start trip tracking
   const startTracking = async () => {
     if (isTracking) return;
+
+    if (idleSubRef.current) {
+      idleSubRef.current.remove();
+      idleSubRef.current = null;
+    }
 
     globalSamplesBuffer = [];
     setSamples([]);
@@ -159,6 +212,10 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         distanceInterval: 1,
       },
       (loc) => {
+        setGpsAccuracy(loc.coords.accuracy ?? null);
+        if (loc.coords.heading != null && loc.coords.heading >= 0) {
+          setHeading(loc.coords.heading);
+        }
         const sample: GpsSample = {
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
@@ -215,6 +272,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     setIsTracking(false);
+    setIsSaving(true);
     const endTime = Date.now();
     const startTime = startTimeRef.current ?? endTime;
     const finalSamples = [...globalSamplesBuffer];
@@ -253,7 +311,11 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         await enqueueOrExec('trip', payload, () => saveTrip(payload));
       } catch (insertErr) {
         console.error('[TrackingContext] Exception saving trip:', insertErr);
+      } finally {
+        setIsSaving(false);
       }
+    } else {
+      setIsSaving(false);
     }
 
     return metrics;
@@ -272,6 +334,9 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         samples,
         routeGeoJson,
         currentCoords,
+        gpsAccuracy,
+        heading,
+        isSaving,
         startTracking,
         stopTracking,
         permissionGranted,

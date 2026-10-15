@@ -1,357 +1,696 @@
-import { useEffect, useState } from 'react';
+/**
+ * LoginScreen — Phase 2 Rebuilt Sign-In
+ *
+ * Requirements:
+ *  1. Mark, "Join the grid", one line of value.
+ *  2. Stacked buttons: Continue with Apple (iOS), Continue with Google (official multicolour logo), Continue with email (outline).
+ *  3. Consent line linking Terms and Privacy (env vars).
+ *  4. Benefits: 2x3 grid of Phosphor icon chips (No emojis).
+ *  5. Passwordless email OTP flow with 60s resend timer and inline validation.
+ *  6. Error handling via toUserMessage().
+ */
+
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   Image,
   TextInput,
-  Pressable,
+  TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
+  Linking,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { Car } from 'lucide-react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '@/constants/theme';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { IconChip } from '@/components/ui/IconChip';
+import { Icon } from '@/components/ui/Icon';
+import { Button } from '@/components/ui/Button';
+import { GoogleLogo } from '@/components/ui/GoogleLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  clearPendingReferralCode,
-  claimReferralCode,
-  detectAndSaveLaunchReferral,
-} from '@/services/referrals';
+import { toUserMessage } from '@/utils/toUserMessage';
+import { detectAndSaveLaunchReferral, claimReferralCode, clearPendingReferralCode } from '@/services/referrals';
+
+const TERMS_URL = process.env.EXPO_PUBLIC_TERMS_URL || 'https://slipstream.app/terms';
+const PRIVACY_URL = process.env.EXPO_PUBLIC_PRIVACY_URL || 'https://slipstream.app/privacy';
+
+const BENEFITS = [
+  { id: 'tracking', label: 'Live tracking', icon: 'speedometer' as const, color: 'cyan' as const },
+  { id: 'drag', label: 'Drag timing', icon: 'timer' as const, color: 'warning' as const },
+  { id: 'lap', label: 'Lap timing', icon: 'flag' as const, color: 'violet' as const },
+  { id: 'leaderboards', label: 'Leaderboards', icon: 'trophy' as const, color: 'success' as const },
+  { id: 'roads', label: 'Roads', icon: 'path' as const, color: 'blue' as const },
+  { id: 'maintenance', label: 'Maintenance', icon: 'gear' as const, color: 'default' as const },
+];
+
+const RESEND_COOLDOWN_SECONDS = 60;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
-  const { signInWithEmail, signUpWithEmail } = useAuth();
-  const params = useLocalSearchParams<{ mode?: string; referralCode?: string }>();
+  const { signInWithGoogle, signInWithApple, sendEmailOtp, verifyEmailOtp } = useAuth();
 
-  const [mode, setMode] = useState<'signin' | 'signup'>(
-    params.mode === 'signup' || params.referralCode ? 'signup' : 'signin',
-  );
-  const [referralCode, setReferralCode] = useState<string | null>(
-    params.referralCode ? params.referralCode.trim().toUpperCase() : null,
-  );
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState<boolean>(false);
+  const [emailMode, setEmailMode] = useState<boolean>(false);
+  const [emailStep, setEmailStep] = useState<'input' | 'otp'>('input');
+  const [email, setEmail] = useState<string>('');
+  const [otpCode, setOtpCode] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [googleLoading, setGoogleLoading] = useState<boolean>(false);
+  const [appleLoading, setAppleLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resendTimer, setResendTimer] = useState<number>(0);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
 
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check Apple Auth availability on mount
   useEffect(() => {
-    async function checkPendingReferral() {
-      if (!referralCode) {
-        const pending = await detectAndSaveLaunchReferral();
-        if (pending) {
-          setReferralCode(pending);
-          setMode('signup');
-        }
-      }
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
     }
-    checkPendingReferral();
-  }, [referralCode]);
+  }, []);
 
-  const handleSubmit = async () => {
-    if (!email.trim() || !password) {
-      setErrorMessage('Please fill in both email and password.');
+  // Detect pending referral code
+  useEffect(() => {
+    detectAndSaveLaunchReferral().then((code) => {
+      if (code) setReferralCode(code);
+    }).catch(() => {});
+  }, []);
+
+  // Handle resend countdown timer
+  useEffect(() => {
+    if (resendTimer > 0) {
+      timerRef.current = setInterval(() => {
+        setResendTimer((prev) => {
+          if (prev <= 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [resendTimer]);
+
+  const handleAppleSignIn = async () => {
+    setErrorMessage(null);
+    setAppleLoading(true);
+    try {
+      const err = await signInWithApple();
+      if (err) {
+        setErrorMessage(toUserMessage(err));
+      } else if (referralCode) {
+        claimReferralCode(referralCode).catch(() => {});
+        clearPendingReferralCode().catch(() => {});
+      }
+    } catch (e) {
+      setErrorMessage(toUserMessage(e));
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setGoogleLoading(true);
+    try {
+      const err = await signInWithGoogle();
+      if (err) {
+        setErrorMessage(toUserMessage(err));
+      } else if (referralCode) {
+        claimReferralCode(referralCode).catch(() => {});
+        clearPendingReferralCode().catch(() => {});
+      }
+    } catch (e) {
+      setErrorMessage(toUserMessage(e));
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+    if (!EMAIL_REGEX.test(trimmed)) {
+      setErrorMessage('Please enter a valid email address.');
       return;
     }
 
     setErrorMessage(null);
     setLoading(true);
-
     try {
-      const err =
-        mode === 'signin'
-          ? await signInWithEmail(email.trim(), password)
-          : await signUpWithEmail(email.trim(), password, referralCode ?? undefined);
-
+      const err = await sendEmailOtp(trimmed);
       if (err) {
-        setErrorMessage(err.message);
-      } else if (mode === 'signup' && referralCode) {
-        // Also call claim directly for idempotency in case email auto-confirms
-        claimReferralCode(referralCode).catch(() => {});
-        await clearPendingReferralCode();
+        setErrorMessage(toUserMessage(err));
+      } else {
+        setEmailStep('otp');
+        setResendTimer(RESEND_COOLDOWN_SECONDS);
       }
+    } catch (e) {
+      setErrorMessage(toUserMessage(e));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleVerifyOtp = async () => {
+    const code = otpCode.trim();
+    if (!code || code.length < 6) {
+      setErrorMessage('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setLoading(true);
+    try {
+      const err = await verifyEmailOtp(email.trim().toLowerCase(), code);
+      if (err) {
+        setErrorMessage(toUserMessage(err));
+      } else if (referralCode) {
+        claimReferralCode(referralCode).catch(() => {});
+        clearPendingReferralCode().catch(() => {});
+      }
+    } catch (e) {
+      setErrorMessage(toUserMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = useCallback(async () => {
+    if (resendTimer > 0 || loading) return;
+    setErrorMessage(null);
+    setLoading(true);
+    try {
+      const err = await sendEmailOtp(email.trim().toLowerCase());
+      if (err) {
+        setErrorMessage(toUserMessage(err));
+      } else {
+        setResendTimer(RESEND_COOLDOWN_SECONDS);
+      }
+    } catch (e) {
+      setErrorMessage(toUserMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [email, resendTimer, loading, sendEmailOtp]);
+
+  const openUrl = (url: string) => {
+    Linking.openURL(url).catch((err) => console.warn('[Login] Cannot open URL:', err));
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <View style={styles.brand}>
+    <ScreenContainer scrollable contentStyle={styles.scrollContent}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardContainer}
+      >
+        {/* ── Brand Header ── */}
+        <View style={styles.brandHeader}>
           <Image
-            source={require('../../../assets/logo.png')}
-            style={styles.logoImage}
+            source={require('../../../assets/splash-mark.png')}
+            style={styles.markImage}
             resizeMode="contain"
           />
-          <Text style={styles.title}>Slipstream</Text>
-          <View style={styles.accentLine} />
-          <Text style={styles.tagline}>High-Performance Telemetry & Navigation</Text>
+          <Text style={styles.title}>Join the grid</Text>
+          <Text style={styles.subtitle}>
+            Precision telemetry, drag timing, and social leaderboards.
+          </Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.tabToggle}>
-            <Pressable
-              style={[styles.toggleBtn, mode === 'signin' && styles.toggleBtnActive]}
-              onPress={() => {
-                setMode('signin');
-                setErrorMessage(null);
-              }}
-            >
-              <Text
-                style={[styles.toggleBtnText, mode === 'signin' && styles.toggleBtnTextActive]}
-              >
-                Sign In
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.toggleBtn, mode === 'signup' && styles.toggleBtnActive]}
-              onPress={() => {
-                setMode('signup');
-                setErrorMessage(null);
-              }}
-            >
-              <Text
-                style={[styles.toggleBtnText, mode === 'signup' && styles.toggleBtnTextActive]}
-              >
-                Sign Up
-              </Text>
-            </Pressable>
+        {/* ── Referral Pill (if invite link detected) ── */}
+        {referralCode ? (
+          <View style={styles.referralPill}>
+            <Icon name="seal-check" size={16} color={Colors.accent.cyan} weight="fill" />
+            <Text style={styles.referralText}>
+              VIP Driver invite applied:{' '}
+              <Text style={styles.referralCode}>{referralCode}</Text>
+            </Text>
           </View>
+        ) : null}
 
-          {mode === 'signup' && referralCode ? (
-            <View style={styles.referralBanner}>
-              <View style={styles.referralIconContainer}>
-                <Car size={18} strokeWidth={1.5} color={Colors.accentOrange} />
-              </View>
-              <View style={styles.referralContent}>
-                <Text style={styles.referralTitle}>Driver Invite Applied</Text>
-                <Text style={styles.referralCodeText}>
-                  VIP Referral Code:{' '}
-                  <Text style={styles.referralCodeHighlight}>{referralCode}</Text>
-                </Text>
-              </View>
+        {/* ── Error Banner ── */}
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <Icon name="warning" size={18} color={Colors.semantic.danger} weight="bold" />
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          </View>
+        ) : null}
+
+        {/* ── 2 x 3 Benefits Grid ── */}
+        {!emailMode && (
+          <View style={styles.benefitsCard}>
+            <View style={styles.benefitsGrid}>
+              {BENEFITS.map((item) => (
+                <View key={item.id} style={styles.benefitItem}>
+                  <IconChip
+                    name={item.icon}
+                    color={item.color}
+                    size={18}
+                    chipSize={36}
+                  />
+                  <Text style={styles.benefitLabel}>{item.label}</Text>
+                </View>
+              ))}
             </View>
-          ) : null}
-
-          {errorMessage ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errorMessage}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="driver@slipstream.io"
-              placeholderTextColor={Colors.textMuted}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
           </View>
+        )}
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••••••"
-              placeholderTextColor={Colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryBtn,
-              loading && styles.btnDisabled,
-              pressed && !loading && styles.btnPressed,
-            ]}
-            onPress={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={Colors.bgBase} />
-            ) : (
-              <Text style={styles.primaryBtnText}>
-                {mode === 'signin' ? 'Sign In' : 'Create Account'}
-              </Text>
+        {/* ── Action Section ── */}
+        {!emailMode ? (
+          <View style={styles.buttonStack}>
+            {/* Apple Sign-In (iOS) */}
+            {appleAvailable && (
+              <TouchableOpacity
+                style={[styles.appleButton, appleLoading && styles.btnDisabled]}
+                onPress={handleAppleSignIn}
+                activeOpacity={0.85}
+                disabled={appleLoading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator color="#05070D" />
+                ) : (
+                  <View style={styles.btnRow}>
+                    <Icon name="user" size={18} color="#05070D" weight="fill" />
+                    <Text style={styles.appleButtonText}>Continue with Apple</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
             )}
-          </Pressable>
+
+            {/* Google Sign-In */}
+            <TouchableOpacity
+              style={[styles.googleButton, googleLoading && styles.btnDisabled]}
+              onPress={handleGoogleSignIn}
+              activeOpacity={0.85}
+              disabled={googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color={Colors.text.primary} />
+              ) : (
+                <View style={styles.btnRow}>
+                  <GoogleLogo size={20} />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Email Sign-In (Outline) */}
+            <TouchableOpacity
+              style={styles.emailButton}
+              onPress={() => {
+                setErrorMessage(null);
+                setEmailMode(true);
+                setEmailStep('input');
+              }}
+              activeOpacity={0.85}
+            >
+              <View style={styles.btnRow}>
+                <Icon name="user-circle" size={18} color={Colors.text.primary} />
+                <Text style={styles.emailButtonText}>Continue with email</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* ── Passwordless Email OTP Flow ── */
+          <View style={styles.otpCard}>
+            <View style={styles.otpHeader}>
+              <Text style={styles.otpTitle}>
+                {emailStep === 'input' ? 'Sign in with email' : 'Verify code'}
+              </Text>
+              <Text style={styles.otpSubtitle}>
+                {emailStep === 'input'
+                  ? "We'll send a 6-digit one-time code. No passwords."
+                  : `Enter the code sent to ${email}`}
+              </Text>
+            </View>
+
+            {emailStep === 'input' ? (
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>Email address</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="driver@slipstream.app"
+                  placeholderTextColor={Colors.text.tertiary}
+                  value={email}
+                  onChangeText={(val) => {
+                    setEmail(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSendOtp}
+                />
+
+                <Button
+                  variant="primary"
+                  loading={loading}
+                  onPress={handleSendOtp}
+                  style={styles.formButton}
+                >
+                  Send code
+                </Button>
+
+                <TouchableOpacity
+                  style={styles.backOption}
+                  onPress={() => {
+                    setEmailMode(false);
+                    setErrorMessage(null);
+                  }}
+                >
+                  <Text style={styles.backOptionText}>Back to all options</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.formGroup}>
+                <Text style={styles.inputLabel}>6-digit code</Text>
+                <TextInput
+                  style={[styles.textInput, styles.otpInput]}
+                  placeholder="123456"
+                  placeholderTextColor={Colors.text.tertiary}
+                  value={otpCode}
+                  onChangeText={(val) => {
+                    setOtpCode(val.replace(/\D/g, '').slice(0, 6));
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleVerifyOtp}
+                />
+
+                <Button
+                  variant="primary"
+                  loading={loading}
+                  onPress={handleVerifyOtp}
+                  style={styles.formButton}
+                >
+                  Verify & continue
+                </Button>
+
+                {/* Resend Timer & Switch Email */}
+                <View style={styles.otpFooter}>
+                  {resendTimer > 0 ? (
+                    <Text style={styles.resendCooldown}>
+                      Resend code in {resendTimer}s
+                    </Text>
+                  ) : (
+                    <TouchableOpacity onPress={handleResend} disabled={loading}>
+                      <Text style={styles.resendAction}>Resend code</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEmailStep('input');
+                      setOtpCode('');
+                      setErrorMessage(null);
+                    }}
+                  >
+                    <Text style={styles.changeEmailText}>Use different email</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Consent Line (Terms & Privacy) ── */}
+        <View style={styles.consentContainer}>
+          <Text style={styles.consentText}>
+            By continuing, you agree to our{' '}
+            <Text style={styles.consentLink} onPress={() => openUrl(TERMS_URL)}>
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.consentLink} onPress={() => openUrl(PRIVACY_URL)}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.bgBase,
+  scrollContent: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[6],
+    paddingBottom: Spacing[10],
   },
-  content: {
+  keyboardContainer: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
   },
-  brand: {
+  brandHeader: {
     alignItems: 'center',
-    marginBottom: Spacing['2xl'],
+    marginBottom: Spacing[6],
   },
-  logoImage: {
-    width: 96,
-    height: 96,
-    marginBottom: Spacing.sm,
+  markImage: {
+    width: 68,
+    height: 68,
+    marginBottom: Spacing[3],
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: 40,
-    color: Colors.textPrimary,
-    letterSpacing: -1,
+    ...Typography.title,
+    color: Colors.text.primary,
+    textAlign: 'center',
+    marginBottom: Spacing[1],
   },
-  accentLine: {
-    width: 48,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: Colors.accentCyan,
-    marginTop: 8,
-    marginBottom: 8,
+  subtitle: {
+    ...Typography.body,
+    fontSize: 15,
+    lineHeight: 22,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    maxWidth: 320,
   },
-  tagline: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    letterSpacing: 0.5,
-  },
-  card: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: 16,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabToggle: {
+  referralPill: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgElevated,
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: Spacing.lg,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: Spacing.sm,
     alignItems: 'center',
-    borderRadius: 6,
-  },
-  toggleBtnActive: {
-    backgroundColor: Colors.bgSurface,
-  },
-  toggleBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.label,
-    color: Colors.textMuted,
-  },
-  toggleBtnTextActive: {
-    color: Colors.textPrimary,
-  },
-  errorBox: {
-    backgroundColor: Colors.accentRedDim,
-    borderColor: Colors.accentRed,
+    justifyContent: 'center',
+    backgroundColor: Colors.tint.cyan,
     borderWidth: 1,
-    borderRadius: 8,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
+    borderColor: 'rgba(34,211,238,0.3)',
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing[4],
+    paddingVertical: Spacing[2],
+    alignSelf: 'center',
+    gap: Spacing[2],
+    marginBottom: Spacing[4],
+  },
+  referralText: {
+    ...Typography.label,
+    fontSize: 12,
+    color: Colors.text.primary,
+  },
+  referralCode: {
+    fontFamily: FontFamily.display,
+    color: Colors.accent.cyan,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.tint.danger,
+    borderWidth: 1,
+    borderColor: 'rgba(244,63,94,0.4)',
+    borderRadius: Radius.sm,
+    padding: Spacing[3],
+    marginBottom: Spacing[4],
+    gap: Spacing[2],
   },
   errorText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.accentRed,
+    ...Typography.label,
+    color: Colors.semantic.danger,
+    flex: 1,
   },
-  inputGroup: {
-    marginBottom: Spacing.md,
-  },
-  label: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    marginBottom: 6,
-  },
-  input: {
-    backgroundColor: Colors.bgElevated,
-    borderRadius: 8,
+  benefitsCard: {
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-    color: Colors.textPrimary,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    borderColor: Colors.hairline,
+    padding: Spacing.card,
+    marginBottom: Spacing[6],
   },
-  primaryBtn: {
-    backgroundColor: Colors.accentCyan,
-    borderRadius: 8,
-    paddingVertical: Spacing.base,
+  benefitsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: Spacing[4],
+  },
+  benefitItem: {
+    width: '50%',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: Spacing.md,
+    gap: Spacing[3],
   },
-  primaryBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.bgBase,
+  benefitLabel: {
+    ...Typography.label,
+    fontSize: 13,
+    color: Colors.text.primary,
+  },
+  buttonStack: {
+    gap: Spacing.gap,
+    marginBottom: Spacing[5],
+  },
+  appleButton: {
+    height: 56,
+    borderRadius: Radius.button,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appleButtonText: {
+    fontFamily: FontFamily.label,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#05070D',
+  },
+  googleButton: {
+    height: 56,
+    borderRadius: Radius.button,
+    backgroundColor: Colors.surface['2'],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleButtonText: {
+    fontFamily: FontFamily.label,
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  emailButton: {
+    height: 56,
+    borderRadius: Radius.button,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emailButtonText: {
+    fontFamily: FontFamily.label,
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text.primary,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
   },
   btnDisabled: {
     opacity: 0.6,
   },
-  btnPressed: {
-    opacity: 0.85,
-  },
-  referralBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.accentCyanDim,
-    borderColor: Colors.accentCyan,
+  otpCard: {
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
     borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    gap: Spacing.md,
+    borderColor: Colors.hairline,
+    padding: Spacing.card,
+    marginBottom: Spacing[5],
   },
-  referralIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.bgSurface,
+  otpHeader: {
+    marginBottom: Spacing[4],
+  },
+  otpTitle: {
+    ...Typography.heading,
+    color: Colors.text.primary,
+    marginBottom: 4,
+  },
+  otpSubtitle: {
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.text.secondary,
+  },
+  formGroup: {
+    gap: Spacing[3],
+  },
+  inputLabel: {
+    ...Typography.overline,
+    color: Colors.text.tertiary,
+  },
+  textInput: {
+    height: 52,
+    backgroundColor: Colors.surface['2'],
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    paddingHorizontal: Spacing[4],
+    fontFamily: FontFamily.body,
+    fontSize: 15,
+    color: Colors.text.primary,
+  },
+  otpInput: {
+    fontFamily: FontFamily.metric,
+    fontSize: 24,
+    letterSpacing: 8,
+    textAlign: 'center',
+    fontVariant: ['tabular-nums'],
+  },
+  formButton: {
+    marginTop: Spacing[2],
+  },
+  backOption: {
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: Spacing[2],
   },
-  referralIcon: {
-    fontSize: 18,
+  backOptionText: {
+    ...Typography.label,
+    color: Colors.accent.cyan,
   },
-  referralContent: {
-    flex: 1,
+  otpFooter: {
+    alignItems: 'center',
+    gap: Spacing[2],
+    marginTop: Spacing[2],
   },
-  referralTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
-    color: Colors.accentCyan,
-    letterSpacing: 0.5,
+  resendCooldown: {
+    ...Typography.label,
+    color: Colors.text.tertiary,
+    fontVariant: ['tabular-nums'],
   },
-  referralCodeText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
-    marginTop: 2,
+  resendAction: {
+    ...Typography.label,
+    color: Colors.accent.cyan,
+    fontWeight: '600',
   },
-  referralCodeHighlight: {
-    fontFamily: FontFamily.bold,
-    color: Colors.textPrimary,
+  changeEmailText: {
+    ...Typography.label,
+    fontSize: 12,
+    color: Colors.text.tertiary,
+  },
+  consentContainer: {
+    paddingHorizontal: Spacing[2],
+    alignItems: 'center',
+  },
+  consentText: {
+    ...Typography.label,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Colors.text.tertiary,
+    textAlign: 'center',
+  },
+  consentLink: {
+    color: Colors.accent.cyan,
+    textDecorationLine: 'underline',
   },
 });

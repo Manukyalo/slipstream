@@ -11,7 +11,8 @@ interface VercelResponse {
 }
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://zzfjvhbuhsugwztllxco.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Zmp2aGJ1aHN1Z3d6dGxseGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTYwOTIsImV4cCI6MjEwNTkzMjA5Mn0.BJ5UtkpSabu4plR4CtHYlKKZkBxWOHzm8AnhJ3fRN5Q';
+// EXPO_PUBLIC_SUPABASE_ANON_KEY must be injected via EAS secret or .env.local — never hardcode.
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 const APP_BASE_URL = (
   process.env.EXPO_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_APP_URL ||
@@ -19,6 +20,10 @@ const APP_BASE_URL = (
 ).replace(/\/+$/, '');
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!SUPABASE_ANON_KEY) {
+    res.status(500).send('Server misconfiguration: missing EXPO_PUBLIC_SUPABASE_ANON_KEY');
+    return;
+  }
   const rawCode = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
   const cleanCode = (rawCode || '').trim().toUpperCase();
 
@@ -291,19 +296,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     <div class="features-list">
       <div class="feature-item">
-        <div class="feature-title">⚡ Drag Timer</div>
+        <div class="feature-title">Drag Timer</div>
         <div class="feature-desc">0-60, 0-100, 100-200 & 1/4 mile runs with 0.01s GPS precision.</div>
       </div>
       <div class="feature-item">
-        <div class="feature-title">📡 Radar Alerts</div>
+        <div class="feature-title">Radar Alerts</div>
         <div class="feature-desc">Live speed cameras, red-light traps, and police hazard beacons.</div>
       </div>
       <div class="feature-item">
-        <div class="feature-title">🏎️ Track Day</div>
+        <div class="feature-title">Track Day</div>
         <div class="feature-desc">Automatic lap detection, delta splits, and trajectory heatmaps.</div>
       </div>
       <div class="feature-item">
-        <div class="feature-title">🔧 Garage Log</div>
+        <div class="feature-title">Garage Log</div>
         <div class="feature-desc">Digital maintenance logbook, tire wear, and vehicle telemetry.</div>
       </div>
     </div>

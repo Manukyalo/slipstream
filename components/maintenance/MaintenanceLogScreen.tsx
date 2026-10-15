@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -10,7 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/Icon';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
 import {
   deleteMaintenanceLog,
   fetchMaintenanceLogs,
@@ -63,17 +66,17 @@ function SummaryStrip({ summary }: SummaryStripProps) {
   const isOverdue = days !== null && days < 0;
   const isDueSoon = days !== null && days >= 0 && days <= 14;
 
-  let dueColor: string = Colors.textSecondary;
-  let dueBg: string = Colors.bgElevated;
-  let dueBorder: string = Colors.border;
+  let dueColor: string = Colors.text.secondary;
+  let dueBg: string = Colors.surface['2'];
+  let dueBorder: string = Colors.hairline;
   if (isOverdue) {
-    dueColor = Colors.accentRed;
-    dueBg = Colors.accentRedDim;
-    dueBorder = Colors.accentRed;
+    dueColor = Colors.semantic.danger;
+    dueBg = Colors.tint.danger;
+    dueBorder = Colors.semantic.danger;
   } else if (isDueSoon) {
-    dueColor = Colors.accentOrange;
-    dueBg = Colors.accentOrangeDim;
-    dueBorder = Colors.accentOrange;
+    dueColor = Colors.semantic.warning;
+    dueBg = Colors.tint.warning;
+    dueBorder = Colors.semantic.warning;
   }
 
   const dueLabel = hasDue
@@ -143,7 +146,7 @@ function LogRow({ log, onDelete }: LogRowProps) {
   return (
     <View style={styles.logRow}>
       <View style={styles.logIconBox}>
-        <Text style={styles.logIcon}>{MAINTENANCE_TYPE_ICONS[type] ?? '🔧'}</Text>
+        <Icon name={MAINTENANCE_TYPE_ICONS[type] ?? 'wrench'} size={18} color={Colors.accent.cyan} />
       </View>
 
       <View style={styles.logContent}>
@@ -175,10 +178,12 @@ function LogRow({ log, onDelete }: LogRowProps) {
 
       <Pressable
         onPress={handleDelete}
-        hitSlop={8}
+        hitSlop={12}
+        accessibilityRole="button"
+        accessibilityLabel="Delete service record"
         style={({ pressed }) => [styles.deleteLogBtn, pressed && styles.pressed]}
       >
-        <Text style={styles.deleteLogIcon}>✕</Text>
+        <Icon name="trash" size={14} color={Colors.text.tertiary} />
       </Pressable>
     </View>
   );
@@ -279,35 +284,27 @@ export function MaintenanceLogScreen({
 
         {/* Content */}
         {isLoading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.accentCyan} />
-            <Text style={styles.loadingText}>Loading service history…</Text>
+          <View style={styles.skeletonWrap}>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </View>
         ) : hasError ? (
-          <View style={styles.centered}>
-            <Text style={styles.errorIcon}>⚠️</Text>
-            <Text style={styles.errorTitle}>Couldn&apos;t load records</Text>
-            <Pressable
-              style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
-              onPress={loadData}
-            >
-              <Text style={styles.retryBtnText}>Retry</Text>
-            </Pressable>
-          </View>
+          <ErrorState
+            message="Couldn't load service records. Please check your connection."
+            onRetry={loadData}
+          />
         ) : logs.length === 0 ? (
-          <View style={styles.centered}>
-            <Text style={styles.emptyIcon}>🔧</Text>
-            <Text style={styles.emptyTitle}>No service records yet</Text>
-            <Text style={styles.emptySubtitle}>
-              Log your first maintenance entry to track costs and schedule reminders.
-            </Text>
-            <Pressable
-              style={({ pressed }) => [styles.emptyAddBtn, pressed && styles.pressed]}
-              onPress={() => setAddModalVisible(true)}
-            >
-              <Text style={styles.emptyAddBtnText}>Log First Service</Text>
-            </Pressable>
-          </View>
+          <EmptyState
+            icon="wrench"
+            iconColor="cyan"
+            title="No service records yet"
+            description="Log your first maintenance entry to track costs and schedule reminders."
+            action={{
+              label: 'Log First Service',
+              onPress: () => setAddModalVisible(true),
+            }}
+          />
         ) : (
           <FlatList
             data={logs}
@@ -337,68 +334,68 @@ export function MaintenanceLogScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Colors.bgBase,
+    backgroundColor: Colors.bg.base,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: Platform.OS === 'ios' ? 56 : 24,
-    paddingBottom: Spacing.base,
-    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing[4],
+    paddingHorizontal: Spacing[4],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.hairline,
   },
   headerCenter: {
     flex: 1,
     alignItems: 'center',
-    marginHorizontal: Spacing.sm,
+    marginHorizontal: Spacing[2],
   },
   headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.heading,
+    fontSize: 16,
+    color: Colors.text.primary,
   },
   headerSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.tertiary,
     marginTop: 1,
   },
   closeBtn: {
-    paddingVertical: Spacing.xs,
-    paddingRight: Spacing.sm,
+    paddingVertical: Spacing[1],
+    paddingRight: Spacing[2],
     minWidth: 60,
   },
   closeBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.heading,
+    fontSize: 16,
+    color: Colors.accent.cyan,
   },
   addBtn: {
-    backgroundColor: Colors.accentCyanDim,
+    backgroundColor: Colors.tint.cyan,
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
+    borderColor: Colors.accent.cyan,
     borderRadius: Radius.sm,
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing[1],
+    paddingHorizontal: Spacing.gap,
     minWidth: 60,
     alignItems: 'center',
   },
   addBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.display,
+    fontSize: 12,
+    color: Colors.accent.cyan,
   },
   // Summary strip
   summaryStrip: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: Colors.bgSurface,
+    backgroundColor: Colors.surface['1'],
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingVertical: Spacing.base,
-    paddingHorizontal: Spacing.md,
+    borderBottomColor: Colors.hairline,
+    paddingVertical: Spacing[4],
+    paddingHorizontal: Spacing.gap,
   },
   summaryCell: {
     flex: 1,
@@ -406,53 +403,53 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   summaryCellValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.display,
+    fontSize: 16,
+    color: Colors.text.primary,
   },
   summaryCellLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.tertiary,
   },
   summarySep: {
     width: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: Colors.hairline,
     marginVertical: 4,
   },
   dueBadge: {
     borderWidth: 1,
-    borderRadius: Radius.xs,
-    paddingHorizontal: Spacing.sm,
+    borderRadius: 4,
+    paddingHorizontal: Spacing[2],
     paddingVertical: 2,
   },
   dueBadgeText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.caption,
+    fontFamily: FontFamily.heading,
+    fontSize: 12,
   },
   // Log list
   listContent: {
-    padding: Spacing.base,
-    paddingBottom: Spacing['4xl'],
+    padding: Spacing[4],
+    paddingBottom: 80,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.borderSubtle,
+    backgroundColor: Colors.hairline,
     marginVertical: 2,
   },
   logRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
+    paddingVertical: Spacing.gap,
+    gap: Spacing.gap,
   },
   logIconBox: {
     width: 40,
     height: 40,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.bgElevated,
+    borderRadius: 10,
+    backgroundColor: Colors.surface['2'],
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.hairline,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -469,21 +466,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   logType: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.heading,
+    fontSize: 13,
+    color: Colors.text.primary,
     flex: 1,
   },
   logCost: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
-    color: Colors.accentCyan,
-    marginLeft: Spacing.sm,
+    fontFamily: FontFamily.display,
+    fontSize: 13,
+    color: Colors.accent.cyan,
+    marginLeft: Spacing[2],
   },
   logDesc: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.secondary,
     lineHeight: 16,
   },
   logMeta: {
@@ -494,90 +491,95 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   logMetaText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.tertiary,
   },
   logMetaDot: {
-    color: Colors.textMuted,
-    fontSize: FontSize.caption,
+    color: Colors.text.tertiary,
+    fontSize: 12,
   },
   logNextDue: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentOrange,
+    fontFamily: FontFamily.label,
+    fontSize: 12,
+    color: Colors.semantic.warning,
   },
   deleteLogBtn: {
-    padding: Spacing.xs,
+    padding: Spacing[1],
     marginTop: 2,
   },
   deleteLogIcon: {
     fontSize: 12,
-    color: Colors.textMuted,
+    color: Colors.text.tertiary,
   },
   // States
+  skeletonWrap: {
+    padding: Spacing.screen,
+    gap: Spacing.gap,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.xl,
-    gap: Spacing.md,
+    padding: Spacing[6],
+    gap: Spacing.gap,
   },
   loadingText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textMuted,
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    color: Colors.text.tertiary,
   },
   errorIcon: {
     fontSize: 36,
   },
   errorTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.heading,
+    fontSize: 16,
+    color: Colors.text.secondary,
   },
   retryBtn: {
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Colors.surface['2'],
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
+    borderColor: Colors.accent.cyan,
+    borderRadius: 10,
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[6],
   },
   retryBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.heading,
+    fontSize: 13,
+    color: Colors.accent.cyan,
   },
   emptyIcon: {
     fontSize: 40,
   },
   emptyTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.display,
+    fontSize: 16,
+    color: Colors.text.primary,
   },
   emptySubtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.tertiary,
     textAlign: 'center',
     maxWidth: 260,
     lineHeight: 17,
   },
   emptyAddBtn: {
-    backgroundColor: Colors.accentCyan,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-    marginTop: Spacing.sm,
+    backgroundColor: Colors.accent.cyan,
+    borderRadius: 10,
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[6],
+    marginTop: Spacing[2],
   },
   emptyAddBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
-    color: Colors.textInverse,
+    fontFamily: FontFamily.display,
+    fontSize: 13,
+    color: Colors.text.inverse,
   },
   pressed: {
     opacity: 0.7,
   },
 });
+

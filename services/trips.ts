@@ -7,7 +7,21 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Json } from '@/types/database';
+import type { Json, Trip } from '@/types/database';
+
+export async function fetchRecentTrips(limit = 50): Promise<Trip[]> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.warn('[TripsService] Failed to fetch trips:', error.message);
+    throw new Error(`Failed to load trips: ${error.message}`);
+  }
+  return data ?? [];
+}
 
 export interface InsertTripPayload {
   client_id?: string | null;

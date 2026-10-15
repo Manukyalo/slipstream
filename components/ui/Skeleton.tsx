@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Duration } from '@/constants/design';
+import { Colors } from '@/constants/theme';
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,25 +35,28 @@ export function Skeleton({
   width,
   height,
   borderRadius = 8,
-  baseColor = Colors.bgSurface,
+  baseColor = Colors.surface['1'],
   style,
 }: SkeletonProps) {
-  // useState gives us a stable, lint-compliant reference to the Animated.Value
-  // that can be safely read in render without triggering react-hooks/refs.
+  const reduceMotion = useReduceMotion();
   const [shimmerAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
+    if (reduceMotion) {
+      shimmerAnim.setValue(0);
+      return;
+    }
     const loop = Animated.loop(
       Animated.timing(shimmerAnim, {
         toValue: 1,
-        duration: Duration.shimmer,
+        duration: 1200, // 1.2 s shimmer
         easing: Easing.linear,
         useNativeDriver: true,
       }),
     );
     loop.start();
     return () => loop.stop();
-  }, [shimmerAnim]);
+  }, [shimmerAnim, reduceMotion]);
 
   const resolvedWidth = typeof width === 'number' ? width : 300;
   const translateX = shimmerAnim.interpolate({
@@ -73,20 +77,22 @@ export function Skeleton({
         style,
       ]}
     >
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}
-      >
-        <LinearGradient
-          colors={[
-            'transparent',
-            Colors.bgElevated,
-            'transparent',
-          ]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+      {!reduceMotion && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { transform: [{ translateX }] }]}
+        >
+          <LinearGradient
+            colors={[
+              'transparent',
+              Colors.surface['2'],
+              'transparent',
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      )}
     </View>
   );
 }

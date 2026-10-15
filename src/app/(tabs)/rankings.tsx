@@ -1,55 +1,107 @@
 /**
- * RankingsScreen
+ * RankingsScreen — Phase 7
  *
- * Three tabs: Top Speed · Drag Times · Distance
- * Two scopes: Global · Same Car (requires a primary vehicle)
- * Drag sub-filter: ¼ · ½ · Mile
+ * Leaderboards:
+ *  - Three tabs: Top Speed · Drag · Distance (via Segmented)
+ *  - Period chips: Week · Month · All
+ *  - Scope chips: Global · Same Car
+ *  - Drag distance sub-chips: ¼ mi · ½ mi · 1 mi
  *
- * Visual direction: dark cockpit feel. Rank badge uses a gradient fill for
- * the podium positions (1–3). Each row animates in with a staggered fade-up
- * on first load. Current user's row is highlighted with an accent rail.
+ * Features:
+ *  - Top-3 podium layout (avatar, handle, car, value)
+ *  - Ranks 4+ list rows below
+ *  - Pinned "You, #N" bar anchored above tab bar
+ *  - Cached last-known leaderboard with "Updated X ago" banner
+ *  - Skeleton loading state & pull-to-refresh
+ *  - Friendly error handling via toUserMessage() with Retry CTA
+ *  - Network reachability diagnostic sheet
+ *  - Pure theme tokens + Phosphor icons only
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Animated,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AlertTriangle, Flag, RefreshCw } from 'lucide-react-native';
-import { Colors, Duration, FontFamily, FontSize, LineHeight, Radius, Spacing } from '@/constants/design';
-import { Theme } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { router } from 'expo-router';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { Text } from '@/components/ui/Text';
+import { Icon } from '@/components/ui/Icon';
+import { Segmented } from '@/components/ui/Segmented';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { SkeletonCard } from '@/components/ui/Skeleton';
-import { useRankings, type UseRankingsParams } from '@/hooks/useRankings';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { Button } from '@/components/ui/Button';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { useVehicles } from '@/hooks/useVehicles';
+import { useRankings } from '@/hooks/useRankings';
+import { formatTimeAgo } from '@/services/rankingsCache';
+import { runNetworkDiagnostic, type NetworkDiagnosticResult } from '@/utils/networkDiagnostic';
 import type {
-  DragDistanceType,
+  BoardTab,
   ScopeType,
-  SameCarFilter,
+  PeriodType,
+  DragDistanceType,
   TopSpeedEntry,
   DragEntry,
   DistanceEntry,
 } from '@/services/rankings';
-import { useAuth } from '@/contexts/AuthContext';
-import { fetchUserVehicles } from '@/services/vehicles';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ─── Constants & Types ────────────────────────────────────────────────────────
+
+const BOARD_TABS = ['Top Speed', 'Drag', 'Distance'] as const;
+
+const PERIODS: { id: PeriodType; label: string }[] = [
+  { id: 'week',  label: 'Week' },
+  { id: 'month', label: 'Month' },
+  { id: 'all',   label: 'All' },
+];
+
+const SCOPES: { id: ScopeType; label: string }[] = [
+  { id: 'global',   label: 'Global' },
+  { id: 'same_car', label: 'Same Car' },
+];
+
+const DRAG_DISTANCES: { id: DragDistanceType; label: string }[] = [
+  { id: 'quarter_mile', label: '¼ mi' },
+  { id: 'half_mile',    label: '½ mi' },
+  { id: 'mile',         label: '1 mi' },
+];
+
+const PODIUM_COLORS = {
+  1: { badge: '#FFD700', text: '#FFD700', bg: 'rgba(255,215,0,0.12)' },
+  2: { badge: '#C0C0C0', text: '#E2E8F0', bg: 'rgba(192,192,192,0.10)' },
+  3: { badge: '#CD7F32', text: '#F59E0B', bg: 'rgba(205,127,50,0.10)' },
+} as const;
+
+export interface DisplayEntry {
+  rank: number;
+  name: string;
+  car: string;
+  metric: string;
+  subMetric?: string;
+  isCurrentUser: boolean;
+  userId: string;
+}
+
+// ─── Formatters ───────────────────────────────────────────────────────────────
 
 function formatSpeed(kmh: number): string {
   return `${Math.round(kmh)} km/h`;
 }
 
 function formatElapsed(ms: number): string {
-  const s = ms / 1000;
-  return `${s.toFixed(3)}s`;
+  return `${(ms / 1000).toFixed(3)}s`;
 }
 
 function formatDistance(m: number): string {
@@ -60,47 +112,18 @@ function formatDistance(m: number): string {
 function getInitials(name: string): string {
   return name
     .split(' ')
+    .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('');
+    .join('') || 'D';
 }
 
-const PODIUM_COLORS: Record<number, string> = {
-  1: '#FFD700',
-  2: '#C0C0C0',
-  3: '#CD7F32',
-};
+// ─── Avatar Component ─────────────────────────────────────────────────────────
 
-// ---------------------------------------------------------------------------
-// Tab / scope / distance config
-// ---------------------------------------------------------------------------
-
-type BoardTab = 'top_speed' | 'drag' | 'distance';
-
-const TABS: { id: BoardTab; label: string }[] = [
-  { id: 'top_speed', label: 'Top Speed' },
-  { id: 'drag', label: 'Drag Times' },
-  { id: 'distance', label: 'Distance' },
-];
-
-const SCOPES: { id: ScopeType; label: string }[] = [
-  { id: 'global', label: 'Global' },
-  { id: 'same_car', label: 'Same Car' },
-];
-
-const DRAG_DISTANCES: { id: DragDistanceType; label: string }[] = [
-  { id: 'quarter_mile', label: '¼ mi' },
-  { id: 'half_mile', label: '½ mi' },
-  { id: 'mile', label: '1 mi' },
-];
-
-// ---------------------------------------------------------------------------
-// Avatar
-// ---------------------------------------------------------------------------
-
-function Avatar({ name, size = 40 }: { name: string; size?: number }) {
+function DriverAvatar({ name, size = 40 }: { name: string; size?: number }) {
   const initials = getInitials(name);
   const hue = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+
   return (
     <View
       style={[
@@ -109,722 +132,971 @@ function Avatar({ name, size = 40 }: { name: string; size?: number }) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: `hsl(${hue}, 55%, 22%)`,
+          backgroundColor: `hsl(${hue}, 45%, 18%)`,
+          borderColor: `hsl(${hue}, 55%, 32%)`,
         },
       ]}
     >
-      <Text style={[styles.avatarText, { fontSize: size * 0.35 }]}>{initials}</Text>
+      <Text
+        variant="label"
+        color={Colors.text.primary}
+        style={{ fontSize: size * 0.38, fontWeight: '700' }}
+      >
+        {initials}
+      </Text>
     </View>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Rank Badge
-// ---------------------------------------------------------------------------
+// ─── Podium Card Component ───────────────────────────────────────────────────
 
-function RankBadge({ rank }: { rank: number }) {
-  const isPodium = rank <= 3;
-  const color = PODIUM_COLORS[rank] ?? Colors.textMuted;
-  return (
-    <View style={[styles.rankBadge, isPodium && { borderColor: color }]}>
-      <Text style={[styles.rankText, { color }]}>{rank}</Text>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Animated row wrapper — staggered fade + slide up on first mount
-// ---------------------------------------------------------------------------
-
-function AnimatedRow({ index, children }: { index: number; children: React.ReactNode }) {
-  // useState gives a stable reference that satisfies react-hooks/refs (same as Skeleton pattern).
-  const [anim] = useState(() => new Animated.Value(0));
-
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: Duration.reveal,
-      delay: Math.min(index * 40, 400),
-      useNativeDriver: true,
-    }).start();
-  }, [anim, index]);
-
-  const opacity = anim;
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] });
-
-  return (
-    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      {children}
-    </Animated.View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Row components
-// ---------------------------------------------------------------------------
-
-function TopSpeedRow({
-  entry,
-  index,
-  isCurrentUser,
-}: {
-  entry: TopSpeedEntry;
-  index: number;
+interface PodiumCardProps {
+  rank: 1 | 2 | 3;
+  name: string;
+  car: string;
+  metric: string;
   isCurrentUser: boolean;
-}) {
+}
+
+function PodiumCard({ rank, name, car, metric, isCurrentUser }: PodiumCardProps) {
+  const colors = PODIUM_COLORS[rank];
+  const isFirst = rank === 1;
+
   return (
-    <AnimatedRow index={index}>
-      <View style={[styles.row, isCurrentUser && styles.rowHighlight]}>
-        {isCurrentUser && <View style={styles.rowAccentRail} />}
-        <RankBadge rank={entry.rank} />
-        <Avatar name={entry.display_name} />
-        <View style={styles.rowMid}>
-          <Text style={styles.rowName} numberOfLines={1}>
-            {entry.display_name}
-          </Text>
-          {(entry.make || entry.model) && (
-            <Text style={styles.rowSub} numberOfLines={1}>
-              {[entry.year, entry.make, entry.model].filter(Boolean).join(' ')}
-            </Text>
-          )}
+    <View
+      style={[
+        styles.podiumCol,
+        isFirst && styles.podiumColFirst,
+      ]}
+    >
+      {/* Trophy icon for 1st place */}
+      {isFirst && (
+        <View style={styles.crownWrap}>
+          <Icon name="trophy" size={20} color={colors.text} weight="fill" />
         </View>
-        <View style={styles.rowStat}>
-          <Text style={[styles.rowStatValue, { color: Colors.accentCyan }]}>
-            {formatSpeed(entry.top_speed)}
+      )}
+
+      {/* Driver Avatar with Rank Badge */}
+      <View style={styles.podiumAvatarWrap}>
+        <DriverAvatar name={name} size={isFirst ? 52 : 44} />
+        <View style={[styles.podiumRankBadge, { backgroundColor: colors.badge }]}>
+          <Text variant="label" color="#05070D" style={styles.podiumRankText} tabular>
+            {rank}
           </Text>
         </View>
       </View>
-    </AnimatedRow>
+
+      {/* Driver & Car info */}
+      <Text
+        variant="body"
+        color={isCurrentUser ? Colors.accent.cyan : Colors.text.primary}
+        style={[styles.podiumName, isFirst && styles.podiumNameFirst]}
+        numberOfLines={1}
+      >
+        {name}
+      </Text>
+
+      {car ? (
+        <Text variant="overline" color={Colors.text.tertiary} numberOfLines={1} style={styles.podiumCar}>
+          {car}
+        </Text>
+      ) : null}
+
+      {/* Metric value pedestal */}
+      <View style={[styles.podiumPedestal, { backgroundColor: colors.bg, borderColor: colors.badge }]}>
+        <Text
+          variant="label"
+          color={colors.text}
+          style={[styles.podiumMetric, isFirst && styles.podiumMetricFirst]}
+          tabular
+        >
+          {metric}
+        </Text>
+      </View>
+    </View>
   );
 }
 
-function DragRow({
-  entry,
-  index,
-  isCurrentUser,
-}: {
-  entry: DragEntry;
-  index: number;
+// ─── List Row Component ───────────────────────────────────────────────────────
+
+interface LeaderboardRowProps {
+  rank: number;
+  name: string;
+  car: string;
+  metric: string;
+  subMetric?: string;
   isCurrentUser: boolean;
-}) {
-  return (
-    <AnimatedRow index={index}>
-      <View style={[styles.row, isCurrentUser && styles.rowHighlight]}>
-        {isCurrentUser && <View style={styles.rowAccentRail} />}
-        <RankBadge rank={entry.rank} />
-        <Avatar name={entry.display_name} />
-        <View style={styles.rowMid}>
-          <Text style={styles.rowName} numberOfLines={1}>
-            {entry.display_name}
-          </Text>
-          {(entry.make || entry.model) && (
-            <Text style={styles.rowSub} numberOfLines={1}>
-              {[entry.year, entry.make, entry.model].filter(Boolean).join(' ')}
-            </Text>
-          )}
-        </View>
-        <View style={styles.rowStat}>
-          <Text style={[styles.rowStatValue, { color: Colors.accentOrange }]}>
-            {formatElapsed(entry.elapsed_ms)}
-          </Text>
-          <Text style={styles.rowStatSub}>{formatSpeed(entry.top_speed)}</Text>
-        </View>
-      </View>
-    </AnimatedRow>
-  );
 }
 
-function DistanceRow({
-  entry,
-  index,
+function LeaderboardRow({
+  rank,
+  name,
+  car,
+  metric,
+  subMetric,
   isCurrentUser,
-}: {
-  entry: DistanceEntry;
-  index: number;
-  isCurrentUser: boolean;
-}) {
+}: LeaderboardRowProps) {
   return (
-    <AnimatedRow index={index}>
-      <View style={[styles.row, isCurrentUser && styles.rowHighlight]}>
-        {isCurrentUser && <View style={styles.rowAccentRail} />}
-        <RankBadge rank={entry.rank} />
-        <Avatar name={entry.display_name} />
-        <View style={styles.rowMid}>
-          <Text style={styles.rowName} numberOfLines={1}>
-            {entry.display_name}
-          </Text>
-          <Text style={styles.rowSub}>{entry.total_trips} trips</Text>
-        </View>
-        <View style={styles.rowStat}>
-          <Text style={[styles.rowStatValue, { color: Colors.accentGreen }]}>
-            {formatDistance(entry.total_distance_m)}
-          </Text>
-        </View>
+    <View style={[styles.row, isCurrentUser && styles.rowCurrent]}>
+      {isCurrentUser && <View style={styles.rowAccentBar} />}
+
+      {/* Rank number */}
+      <View style={styles.rankCell}>
+        <Text variant="label" color={Colors.text.tertiary} style={styles.rankNum} tabular>
+          {rank}
+        </Text>
       </View>
-    </AnimatedRow>
-  );
-}
 
-// ---------------------------------------------------------------------------
-// Skeleton list
-// ---------------------------------------------------------------------------
+      {/* Avatar */}
+      <DriverAvatar name={name} size={36} />
 
-function LeaderboardSkeleton() {
-  return (
-    <View style={styles.skeletonList}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <SkeletonCard key={i} />
-      ))}
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty / error states
-// ---------------------------------------------------------------------------
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <View style={styles.centeredState}>
-      <View style={styles.stateIconWrap}>
-        <Flag size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
-      </View>
-      <Text style={styles.emptyTitle}>No entries yet</Text>
-      <Text style={styles.emptyBody}>{message}</Text>
-    </View>
-  );
-}
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <View style={styles.centeredState}>
-      <View style={styles.stateIconWrap}>
-        <AlertTriangle size={28} strokeWidth={1.5} color={Theme.colors.flagRed} />
-      </View>
-      <Text style={styles.emptyTitle}>{"Couldn't load leaderboard"}</Text>
-      <Text style={styles.emptyBody}>{message}</Text>
-      <TouchableOpacity style={styles.retryBtn} onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry loading leaderboard">
-        <RefreshCw size={14} strokeWidth={1.5} color={Theme.colors.textPrimary} style={{ marginRight: 6 }} />
-        <Text style={styles.retryBtnText}>Retry</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Pill selector
-// ---------------------------------------------------------------------------
-
-function PillSelector<T extends string>({
-  options,
-  selected,
-  onSelect,
-  accentColor = Colors.accentCyan,
-}: {
-  options: { id: T; label: string }[];
-  selected: T;
-  onSelect: (id: T) => void;
-  accentColor?: string;
-}) {
-  return (
-    <View style={styles.pillRow}>
-      {options.map((opt) => {
-        const isActive = opt.id === selected;
-        return (
-          <Pressable
-            key={opt.id}
-            onPress={() => onSelect(opt.id)}
-            style={[styles.pill, isActive && { backgroundColor: accentColor + '22', borderColor: accentColor }]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isActive }}
-            accessibilityLabel={opt.label}
+      {/* Driver + Car */}
+      <View style={styles.rowMid}>
+        <View style={styles.nameRow}>
+          <Text
+            variant="label"
+            color={isCurrentUser ? Colors.accent.cyan : Colors.text.primary}
+            numberOfLines={1}
+            style={styles.driverName}
           >
-            <Text style={[styles.pillText, isActive && { color: accentColor }]}>
-              {opt.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+            {name}
+          </Text>
+          {isCurrentUser && (
+            <View style={styles.youTag}>
+              <Text variant="overline" color={Colors.accent.cyan} style={styles.youTagText}>
+                YOU
+              </Text>
+            </View>
+          )}
+        </View>
+        {car ? (
+          <Text variant="overline" color={Colors.text.tertiary} numberOfLines={1}>
+            {car}
+          </Text>
+        ) : null}
+      </View>
+
+      {/* Primary + Sub metric */}
+      <View style={styles.statCell}>
+        <Text variant="label" color={Colors.text.primary} style={styles.metricText} tabular>
+          {metric}
+        </Text>
+        {subMetric ? (
+          <Text variant="overline" color={Colors.text.tertiary} tabular>
+            {subMetric}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main screen
-// ---------------------------------------------------------------------------
+// ─── Pinned "You, #N" Bar ────────────────────────────────────────────────────
 
-export default function RankingsScreen() {
+interface PinnedRankBarProps {
+  rank: number | null;
+  metric: string | null;
+  carName: string | null;
+  loading: boolean;
+}
+
+function PinnedRankBar({ rank, metric, carName, loading }: PinnedRankBarProps) {
+  return (
+    <View style={styles.pinnedBar}>
+      <View style={styles.pinnedLeft}>
+        <View style={[styles.pinnedRankPill, rank != null && styles.pinnedRankPillActive]}>
+          <Text
+            variant="label"
+            color={rank != null ? Colors.accent.cyan : Colors.text.tertiary}
+            style={styles.pinnedRankText}
+            tabular
+          >
+            {loading ? '…' : rank != null ? `#${rank}` : '—'}
+          </Text>
+        </View>
+        <View style={styles.pinnedDetails}>
+          <Text variant="label" color={Colors.text.primary} numberOfLines={1}>
+            You
+          </Text>
+          <Text variant="overline" color={Colors.text.tertiary} numberOfLines={1}>
+            {carName ?? 'Personal Best'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.pinnedRight}>
+        <Text
+          variant="label"
+          color={metric ? Colors.accent.cyan : Colors.text.tertiary}
+          style={styles.pinnedMetric}
+          tabular
+        >
+          {metric ?? 'No record'}
+        </Text>
+        <Text variant="overline" color={Colors.text.tertiary}>
+          {rank != null ? 'Current standing' : 'Unranked'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Main Screen Component ────────────────────────────────────────────────────
+
+export default function RankingsScreen({ isEmbedded = false }: { isEmbedded?: boolean } = {}) {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { primaryVehicle } = useVehicles();
 
-  const [activeTab, setActiveTab] = useState<BoardTab>('top_speed');
+  // Filters
+  const [tabIndex, setTabIndex] = useState<number>(0);
+  const [period, setPeriod] = useState<PeriodType>('all');
   const [scope, setScope] = useState<ScopeType>('global');
   const [dragDistance, setDragDistance] = useState<DragDistanceType>('quarter_mile');
-  const [primaryVehicle, setPrimaryVehicle] = useState<SameCarFilter | undefined>(undefined);
 
-  // Fetch the user's primary vehicle once so we can apply the same-car scope filter.
-  useEffect(() => {
-    if (!user?.id) return;
-    fetchUserVehicles(user.id)
-      .then((vehicles) => {
-        const primary = vehicles.find((v) => v.is_primary) ?? vehicles[0];
-        if (primary) setPrimaryVehicle({ make: primary.make, model: primary.model });
-      })
-      .catch(() => {
-        // Non-critical — same_car scope will fall back to global if unavailable
-      });
-  }, [user?.id]);
+  // Network diagnostic modal state
+  const [diagModalOpen, setDiagModalOpen] = useState(false);
+  const [diagResult, setDiagResult] = useState<NetworkDiagnosticResult | null>(null);
+  const [diagRunning, setDiagRunning] = useState(false);
 
-  const sameCarFilter: SameCarFilter | undefined =
-    scope === 'same_car' ? primaryVehicle : undefined;
+  const activeTab: BoardTab =
+    tabIndex === 0 ? 'top_speed' : tabIndex === 1 ? 'drag' : 'distance';
 
-  const params: UseRankingsParams = {
+  const sameCarFilter =
+    scope === 'same_car' && primaryVehicle
+      ? { make: primaryVehicle.make, model: primaryVehicle.model }
+      : undefined;
+
+  const {
+    topSpeed,
+    drag,
+    distance,
+    userRank,
+    userRankLoading,
+    loadUserRank,
+  } = useRankings({
     scope,
+    period,
     sameCarFilter,
     dragDistanceType: dragDistance,
+    currentUserId: user?.id,
+  });
+
+  // Current active board state
+  const activeBoard =
+    activeTab === 'top_speed' ? topSpeed : activeTab === 'drag' ? drag : distance;
+
+  // Sync user rank when tab or filters change
+  useEffect(() => {
+    loadUserRank(activeTab);
+  }, [activeTab, loadUserRank]);
+
+  // Pull-to-refresh
+  const handleRefresh = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    activeBoard.refresh();
+    loadUserRank(activeTab);
+  }, [activeBoard, loadUserRank, activeTab]);
+
+  // Network diagnostic test
+  const handleRunDiagnostic = async () => {
+    setDiagRunning(true);
+    setDiagModalOpen(true);
+    try {
+      const result = await runNetworkDiagnostic();
+      setDiagResult(result);
+    } finally {
+      setDiagRunning(false);
+    }
   };
 
-  const { topSpeed, drag, distance } = useRankings(params);
+  // Convert raw entry to normalized display format
+  function getEntryDisplay(item: TopSpeedEntry | DragEntry | DistanceEntry): DisplayEntry {
+    const isCurrentUser = item.user_id === user?.id;
+    const carParts = [
+      'year' in item && item.year ? String(item.year) : '',
+      item.make ?? '',
+      item.model ?? '',
+    ].filter(Boolean);
+    const carStr = carParts.join(' ');
 
-  // Derive active board state for RefreshControl
-  const activeBoard = activeTab === 'top_speed' ? topSpeed : activeTab === 'drag' ? drag : distance;
-  const isRefreshing = activeBoard.loading && activeBoard.data.length > 0;
+    let metricStr = '';
+    let subMetricStr: string | undefined = undefined;
 
-  const onRefresh = useCallback(() => {
-    topSpeed.refresh();
-    drag.refresh();
-    distance.refresh();
-  }, [topSpeed, drag, distance]);
+    if (activeTab === 'top_speed') {
+      metricStr = formatSpeed((item as TopSpeedEntry).top_speed);
+    } else if (activeTab === 'drag') {
+      const d = item as DragEntry;
+      metricStr = formatElapsed(d.elapsed_ms);
+      subMetricStr = formatSpeed(d.top_speed);
+    } else {
+      const dist = item as DistanceEntry;
+      metricStr = formatDistance(dist.total_distance_m);
+      subMetricStr = `${dist.total_trips} trips`;
+    }
 
-  // Tab indicator slide animation
-  // useState gives a stable reference compatible with react-hooks/refs lint rule.
-  const [tabIndicatorAnim] = useState(() => new Animated.Value(0));
-  const tabIndex = TABS.findIndex((t) => t.id === activeTab);
-  useEffect(() => {
-    Animated.spring(tabIndicatorAnim, {
-      toValue: tabIndex,
-      useNativeDriver: true,
-      tension: 180,
-      friction: 20,
-    }).start();
-  }, [tabIndex, tabIndicatorAnim]);
-
-  // ---------------------------------------------------------------------------
-  // Board renderers
-  // ---------------------------------------------------------------------------
-
-  function renderTopSpeed() {
-    if (topSpeed.loading && topSpeed.data.length === 0) return <LeaderboardSkeleton />;
-    if (topSpeed.error) return <ErrorState message={topSpeed.error} onRetry={topSpeed.refresh} />;
-    if (topSpeed.data.length === 0) return <EmptyState message="Be the first to record a top speed run." />;
-    return (
-      <FlatList
-        data={topSpeed.data}
-        keyExtractor={(item) => `${item.user_id}-${item.recorded_at}`}
-        renderItem={({ item, index }) => (
-          <TopSpeedRow entry={item} index={index} isCurrentUser={item.user_id === user?.id} />
-        )}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={false}
-      />
-    );
+    return {
+      rank: item.rank,
+      name: item.display_name,
+      car: carStr,
+      metric: metricStr,
+      subMetric: subMetricStr,
+      isCurrentUser,
+      userId: item.user_id,
+    };
   }
 
-  function renderDrag() {
-    if (drag.loading && drag.data.length === 0) return <LeaderboardSkeleton />;
-    if (drag.error) return <ErrorState message={drag.error} onRetry={drag.refresh} />;
-    if (drag.data.length === 0) return <EmptyState message="No drag runs recorded yet. Start a drag race to appear here." />;
-    return (
-      <FlatList
-        data={drag.data}
-        keyExtractor={(item) => `${item.user_id}-${item.recorded_at}`}
-        renderItem={({ item, index }) => (
-          <DragRow entry={item} index={index} isCurrentUser={item.user_id === user?.id} />
-        )}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={false}
-      />
-    );
-  }
+  // Derive own metric for pinned bar
+  const myMetricDisplay = ((): string | null => {
+    if (!userRank) return null;
+    if (activeTab === 'top_speed') return formatSpeed(userRank.value);
+    if (activeTab === 'drag') return formatElapsed(userRank.value);
+    return formatDistance(userRank.value);
+  })();
 
-  function renderDistance() {
-    if (distance.loading && distance.data.length === 0) return <LeaderboardSkeleton />;
-    if (distance.error) return <ErrorState message={distance.error} onRetry={distance.refresh} />;
-    if (distance.data.length === 0) return <EmptyState message="Complete trips to appear on the distance board." />;
-    return (
-      <FlatList
-        data={distance.data}
-        keyExtractor={(item) => item.user_id}
-        renderItem={({ item, index }) => (
-          <DistanceRow entry={item} index={index} isCurrentUser={item.user_id === user?.id} />
-        )}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={false}
-      />
-    );
-  }
+  const myCarDisplay = primaryVehicle
+    ? `${primaryVehicle.make} ${primaryVehicle.model}`
+    : null;
 
-  // ---------------------------------------------------------------------------
+  // Normalized display items
+  const allDisplayItems: DisplayEntry[] = activeBoard.data.map(getEntryDisplay);
+  const podiumDisplay = allDisplayItems.slice(0, 3);
+  const remainingRows = allDisplayItems.slice(3);
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Render
-  // ---------------------------------------------------------------------------
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* ── Header ── */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Rankings</Text>
-          <Text style={styles.headerSub}>Community Leaderboard</Text>
-        </View>
-      </View>
-
-      {/* ── Tab Bar ── */}
-      <View style={styles.tabBar}>
-        {TABS.map((tab, i) => {
-          const isActive = tab.id === activeTab;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={styles.tabItem}
-              onPress={() => setActiveTab(tab.id)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              accessibilityLabel={tab.label}
-            >
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-        {/* Sliding underline indicator */}
-        {/* Indicator is sized to 1/3rd of the row; translateX shifts it to the active slot. */}
-        <Animated.View
-          style={[
-            styles.tabIndicator,
-            {
-              transform: [
-                {
-                  // Each slot is 1/3 of the bar width; use a layout-relative approach:
-                  // The indicator width is set to `${100/TABS.length}%` so slot 0 starts
-                  // at 0, slot 1 at 100%, slot 2 at 200% of the indicator's own width.
-                  // We approximate with a large constant (device width ≈ 400px -> 133px/slot)
-                  // and rely on the width % to keep it aligned across screen sizes.
-                  translateX: tabIndicatorAnim.interpolate({
-                    inputRange: [0, 1, 2],
-                    outputRange: [0, 133, 266],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
-      </View>
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.accentCyan}
-            colors={[Colors.accentCyan]}
-          />
+    <>
+      <ScreenContainer
+        title="Rankings"
+        scrollable={false}
+        skipTopInset={isEmbedded}
+        headerRight={
+          <Pressable
+            onPress={handleRunDiagnostic}
+            style={styles.diagHeaderBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Network diagnostic check"
+          >
+            <Icon
+              name="wifi"
+              size={18}
+              color={activeBoard.error ? Colors.semantic.danger : Colors.text.tertiary}
+              weight="regular"
+            />
+          </Pressable>
         }
       >
-        {/* ── Scope Selector ── */}
-        <View style={styles.controlRow}>
-          <PillSelector
-            options={SCOPES}
-            selected={scope}
-            onSelect={setScope}
-            accentColor={Colors.accentCyan}
-          />
-
-          {/* Drag distance sub-filter — only on drag tab */}
-          {activeTab === 'drag' && (
-            <PillSelector
-              options={DRAG_DISTANCES}
-              selected={dragDistance}
-              onSelect={setDragDistance}
-              accentColor={Colors.accentOrange}
+        <View style={styles.container}>
+          {/* ── Tabs (Top Speed · Drag · Distance) ───────────────────────── */}
+          <View style={styles.tabSection}>
+            <Segmented
+              options={[...BOARD_TABS]}
+              selected={tabIndex}
+              onChange={setTabIndex}
             />
-          )}
-        </View>
-
-        {/* Same-car hint */}
-        {scope === 'same_car' && (
-          <View style={styles.sameCarNote}>
-            <Text style={styles.sameCarNoteText}>
-              Showing results for your primary vehicle&apos;s make &amp; model.
-            </Text>
           </View>
-        )}
 
-        {/* ── Board content ── */}
-        <View style={styles.board}>
-          {activeTab === 'top_speed' && renderTopSpeed()}
-          {activeTab === 'drag' && renderDrag()}
-          {activeTab === 'distance' && renderDistance()}
+          {/* ── Filter row: Period + Scope + Drag distance ────────────────── */}
+          <View style={styles.filterSection}>
+            {/* Period chips */}
+            <View style={styles.chipRow}>
+              {PERIODS.map((p) => (
+                <FilterChip
+                  key={p.id}
+                  label={p.label}
+                  active={period === p.id}
+                  onPress={() => setPeriod(p.id)}
+                />
+              ))}
+
+              <View style={styles.filterDivider} />
+
+              {/* Scope chips */}
+              {SCOPES.map((s) => (
+                <FilterChip
+                  key={s.id}
+                  label={s.label}
+                  active={scope === s.id}
+                  onPress={() => setScope(s.id)}
+                />
+              ))}
+            </View>
+
+            {/* Drag sub-filter (only visible on Drag tab) */}
+            {activeTab === 'drag' && (
+              <View style={[styles.chipRow, styles.dragSubRow]}>
+                {DRAG_DISTANCES.map((d) => (
+                  <FilterChip
+                    key={d.id}
+                    label={d.label}
+                    active={dragDistance === d.id}
+                    onPress={() => setDragDistance(d.id)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* ── Offline Cached Banner ────────────────────────────────────── */}
+          {activeBoard.fromCache && (
+            <View style={styles.cachedBanner}>
+              <Icon name="wifi-off" size={14} color={Colors.semantic.warning} weight="bold" />
+              <Text variant="overline" color={Colors.semantic.warning} style={styles.cachedBannerText}>
+                {activeBoard.cachedAt
+                  ? `Offline cache · Updated ${formatTimeAgo(activeBoard.cachedAt)}`
+                  : 'Offline cache · Showing last known data'}
+              </Text>
+            </View>
+          )}
+
+          {/* ── Board Content ────────────────────────────────────────────── */}
+          <View style={styles.listContainer}>
+            {activeBoard.loading && activeBoard.data.length === 0 ? (
+              <View style={styles.skeletonList}>
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </View>
+            ) : activeBoard.error && activeBoard.data.length === 0 ? (
+              <ErrorState
+                message={activeBoard.error}
+                onRetry={activeBoard.refresh}
+              />
+            ) : activeBoard.data.length === 0 ? (
+              <EmptyState
+                icon="trophy"
+                iconColor="cyan"
+                title="No entries yet"
+                description="Set the benchmark by completing a recorded run."
+                action={{
+                  label: 'Start Drive',
+                  onPress: () => router.push('/(tabs)/track'),
+                }}
+              />
+            ) : (
+              <FlatList<DisplayEntry>
+                data={remainingRows}
+                keyExtractor={(item) => `${item.userId}-${item.rank}`}
+                renderItem={({ item }) => (
+                  <LeaderboardRow
+                    rank={item.rank}
+                    name={item.name}
+                    car={item.car}
+                    metric={item.metric}
+                    subMetric={item.subMetric}
+                    isCurrentUser={item.isCurrentUser}
+                  />
+                )}
+                ListHeaderComponent={
+                  podiumDisplay.length > 0 ? (
+                    <View style={styles.podiumContainer}>
+                      {/* 2nd place (left) */}
+                      {podiumDisplay[1] ? (
+                        <PodiumCard
+                          rank={2}
+                          name={podiumDisplay[1].name}
+                          car={podiumDisplay[1].car}
+                          metric={podiumDisplay[1].metric}
+                          isCurrentUser={podiumDisplay[1].isCurrentUser}
+                        />
+                      ) : (
+                        <View style={styles.podiumPlaceholder} />
+                      )}
+
+                      {/* 1st place (center, elevated) */}
+                      {podiumDisplay[0] ? (
+                        <PodiumCard
+                          rank={1}
+                          name={podiumDisplay[0].name}
+                          car={podiumDisplay[0].car}
+                          metric={podiumDisplay[0].metric}
+                          isCurrentUser={podiumDisplay[0].isCurrentUser}
+                        />
+                      ) : null}
+
+                      {/* 3rd place (right) */}
+                      {podiumDisplay[2] ? (
+                        <PodiumCard
+                          rank={3}
+                          name={podiumDisplay[2].name}
+                          car={podiumDisplay[2].car}
+                          metric={podiumDisplay[2].metric}
+                          isCurrentUser={podiumDisplay[2].isCurrentUser}
+                        />
+                      ) : (
+                        <View style={styles.podiumPlaceholder} />
+                      )}
+                    </View>
+                  ) : null
+                }
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.flatListContent,
+                  { paddingBottom: insets.bottom + 84 }, // clears pinned bar
+                ]}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={activeBoard.loading && activeBoard.data.length > 0}
+                    onRefresh={handleRefresh}
+                    tintColor={Colors.accent.cyan}
+                    colors={[Colors.accent.cyan]}
+                  />
+                }
+              />
+            )}
+          </View>
+
+          {/* ── Pinned "You, #N" Bar (Sticky bottom) ──────────────────────── */}
+          <PinnedRankBar
+            rank={userRank?.rank ?? null}
+            metric={myMetricDisplay}
+            carName={myCarDisplay}
+            loading={userRankLoading}
+          />
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </ScreenContainer>
+
+      {/* ── Network Diagnostic Modal ────────────────────────────────────── */}
+      <Modal
+        visible={diagModalOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setDiagModalOpen(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setDiagModalOpen(false)}
+        />
+        <View style={[styles.modalSheet, { paddingBottom: insets.bottom + Spacing[4] }]}>
+          <View style={styles.modalHandle} />
+
+          <View style={styles.modalHeader}>
+            <Icon name="gauge" size={20} color={Colors.accent.cyan} weight="bold" />
+            <Text variant="heading">Network & Server Diagnostic</Text>
+          </View>
+
+          {diagRunning ? (
+            <View style={styles.modalRunning}>
+              <Text variant="body" color={Colors.text.secondary}>
+                Probing connection and Supabase endpoints…
+              </Text>
+            </View>
+          ) : diagResult ? (
+            <View style={styles.diagResults}>
+              <View style={styles.diagRow}>
+                <Text variant="label" color={Colors.text.tertiary}>Network Status</Text>
+                <Text
+                  variant="label"
+                  color={diagResult.isConnected ? Colors.semantic.success : Colors.semantic.danger}
+                >
+                  {diagResult.isConnected ? 'Connected' : 'Disconnected'}
+                </Text>
+              </View>
+
+              <View style={styles.diagRow}>
+                <Text variant="label" color={Colors.text.tertiary}>Internet Reachable</Text>
+                <Text
+                  variant="label"
+                  color={diagResult.isInternetReachable ? Colors.semantic.success : Colors.semantic.warning}
+                >
+                  {diagResult.isInternetReachable === true
+                    ? 'Yes'
+                    : diagResult.isInternetReachable === false
+                    ? 'No route'
+                    : 'Checking'}
+                </Text>
+              </View>
+
+              <View style={styles.diagRow}>
+                <Text variant="label" color={Colors.text.tertiary}>Supabase Host</Text>
+                <Text variant="overline" color={Colors.text.secondary} numberOfLines={1}>
+                  {diagResult.supabaseHost}
+                </Text>
+              </View>
+
+              <View style={styles.diagRow}>
+                <Text variant="label" color={Colors.text.tertiary}>Host Reachable</Text>
+                <Text
+                  variant="label"
+                  color={diagResult.canReachSupabase ? Colors.semantic.success : Colors.semantic.danger}
+                >
+                  {diagResult.canReachSupabase
+                    ? `Reachable (${diagResult.latencyMs} ms)`
+                    : 'Unreachable (UnknownHost)'}
+                </Text>
+              </View>
+
+              {diagResult.errorDetail && (
+                <View style={styles.diagErrorBox}>
+                  <Text variant="overline" color={Colors.semantic.danger}>
+                    {diagResult.errorDetail}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.dashboardChecklist}>
+                <Text variant="label" color={Colors.text.primary} style={{ fontWeight: '700' }}>
+                  Supabase Dashboard Checklist:
+                </Text>
+                <Text variant="overline" color={Colors.text.secondary}>
+                  1. Check Project Status: Settings → General (Must be &quot;Active&quot;).
+                </Text>
+                <Text variant="overline" color={Colors.text.secondary}>
+                  2. Verify Project Ref matches: {diagResult.supabaseHost.split('.')[0]}.
+                </Text>
+                <Text variant="overline" color={Colors.text.secondary}>
+                  3. If project was paused, click &quot;Restore Project&quot; in dashboard.
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <Button
+            variant="primary"
+            onPress={() => setDiagModalOpen(false)}
+            style={styles.modalCloseBtn}
+          >
+            Done
+          </Button>
+        </View>
+      </Modal>
+    </>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
-    backgroundColor: Colors.bgBase,
+  },
+  diagHeaderBtn: {
+    padding: Spacing[2],
   },
 
-  // Header
-  header: {
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.base,
+  // Tabs
+  tabSection: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[2],
+    paddingBottom: Spacing[3],
+  },
+
+  // Filters
+  filterSection: {
+    paddingHorizontal: Spacing.screen,
+    gap: Spacing[2],
+    paddingBottom: Spacing[3],
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
+    flexWrap: 'wrap',
+  },
+  dragSubRow: {
+    paddingTop: 2,
+  },
+  filterDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: Colors.hairline,
+    marginHorizontal: 4,
+  },
+
+  // Cached banner
+  cachedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
+    marginHorizontal: Spacing.screen,
+    marginBottom: Spacing[2],
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[2],
+    backgroundColor: 'rgba(245,158,11,0.08)',
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.22)',
+  },
+  cachedBannerText: {
+    fontWeight: '600',
+  },
+
+  // List & Podium
+  listContainer: {
+    flex: 1,
+  },
+  flatListContent: {
+    paddingHorizontal: Spacing.screen,
+  },
+  podiumContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    paddingVertical: Spacing[4],
+    gap: Spacing[2],
   },
-  headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h1,
-    lineHeight: LineHeight.h1,
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  headerSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-
-  // Tab bar
-  tabBar: {
-    flexDirection: 'row',
-    marginHorizontal: Spacing.base,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderSubtle,
-    position: 'relative',
-  },
-  tabItem: {
+  podiumCol: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    gap: 6,
+  },
+  podiumColFirst: {
+    transform: [{ translateY: -10 }],
+  },
+  podiumPlaceholder: {
+    flex: 1,
+  },
+  crownWrap: {
+    marginBottom: -4,
+  },
+  podiumAvatarWrap: {
+    position: 'relative',
     alignItems: 'center',
   },
-  tabLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.label,
-    color: Colors.textMuted,
-    letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: Colors.textPrimary,
-    fontFamily: FontFamily.semiBold,
-  },
-  tabIndicator: {
+  podiumRankBadge: {
     position: 'absolute',
-    bottom: 0,
-    // Width is 1/3rd of the bar, positioned by translateX
-    width: `${100 / TABS.length}%`,
-    height: 2,
-    backgroundColor: Colors.accentCyan,
-    borderRadius: Radius.full,
+    bottom: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.bg.base,
   },
-
-  // Scroll
-  scroll: {
-    flex: 1,
+  podiumRankText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
-  scrollContent: {
-    paddingBottom: Spacing['4xl'],
+  podiumName: {
+    fontWeight: '600',
+    fontSize: 13,
+    textAlign: 'center',
+    maxWidth: 100,
   },
-
-  // Controls
-  controlRow: {
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.base,
-    gap: Spacing.sm,
+  podiumNameFirst: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  pillRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
+  podiumCar: {
+    fontSize: 10,
+    textAlign: 'center',
+    maxWidth: 100,
+    marginTop: -4,
   },
-  pill: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    borderRadius: Radius.full,
+  podiumPedestal: {
+    width: '100%',
+    paddingVertical: Spacing[2],
+    borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.bgSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
   },
-  pillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
+  podiumMetric: {
+    fontWeight: '700',
+    fontSize: 13,
   },
-
-  // Same-car note
-  sameCarNote: {
-    marginHorizontal: Spacing.base,
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    backgroundColor: Colors.accentCyanDim,
-    borderRadius: Radius.sm,
-    borderLeftWidth: 2,
-    borderLeftColor: Colors.accentCyan,
-  },
-  sameCarNoteText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+  podiumMetricFirst: {
+    fontSize: 15,
   },
 
-  // Board
-  board: {
-    marginTop: Spacing.base,
-    paddingHorizontal: Spacing.base,
-  },
-  listContent: {
-    gap: 0,
-  },
-
-  // Rows — flat hairline list, no individual card chrome
+  // List Rows (ranks 4+)
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 4,
+    paddingVertical: 12,
+    paddingHorizontal: Spacing[2],
     borderBottomWidth: 1,
-    borderBottomColor: Theme.colors.hairline,
-    gap: Spacing.md,
-    overflow: 'hidden',
+    borderBottomColor: Colors.hairline,
+    gap: Spacing[3],
+    position: 'relative',
   },
-  rowHighlight: {
-    // Subtle left rail only — no fill that breaks the flat list rhythm
+  rowCurrent: {
+    backgroundColor: 'rgba(34,211,238,0.04)',
   },
-  rowAccentRail: {
+  rowAccentBar: {
     position: 'absolute',
-    left: -4,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: Theme.colors.signalCyan,
+    left: 0,
+    top: 6,
+    bottom: 6,
+    width: 3,
+    backgroundColor: Colors.accent.cyan,
+    borderRadius: Radius.pill,
+  },
+  rankCell: {
+    width: 24,
+    alignItems: 'center',
+  },
+  rankNum: {
+    fontWeight: '700',
+    fontSize: 13,
   },
   rowMid: {
     flex: 1,
     gap: 2,
   },
-  rowName: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 14,
-    color: Theme.colors.textPrimary,
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
   },
-  rowSub: {
-    fontFamily: Theme.fonts.bodyRegular,
-    fontSize: 12,
-    color: Theme.colors.textMuted,
+  driverName: {
+    fontWeight: '600',
+    maxWidth: 160,
   },
-  rowStat: {
+  youTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(34,211,238,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,211,238,0.30)',
+  },
+  youTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  statCell: {
     alignItems: 'flex-end',
     gap: 2,
   },
-  rowStatValue: {
-    fontFamily: Theme.fonts.numberSemiBold,
-    fontVariant: ['tabular-nums'],
-    fontSize: 15,
-  },
-  rowStatSub: {
-    fontFamily: Theme.fonts.bodyRegular,
-    fontSize: 11,
-    color: Theme.colors.textMuted,
-  },
-
-  // Rank badge
-  rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: Theme.radius.xs,
-    borderWidth: 1,
-    borderColor: Theme.colors.surfaceBorder,
-    backgroundColor: Theme.colors.bgVoid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankText: {
-    fontFamily: Theme.fonts.numberBold,
-    fontVariant: ['tabular-nums'],
-    fontSize: 12,
+  metricText: {
+    fontWeight: '700',
+    fontSize: 14,
   },
 
   // Avatar
   avatar: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: Theme.fonts.numberBold,
-    color: Theme.colors.textPrimary,
-  },
-
-  // Skeleton
-  skeletonList: {
-    gap: Spacing.sm,
-  },
-
-  // Empty / error
-  centeredState: {
-    alignItems: 'center',
-    paddingVertical: Theme.spacing['3xl'],
-    gap: Theme.spacing.md,
-  },
-  stateIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: Theme.radius.full,
-    backgroundColor: Theme.colors.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontFamily: Theme.fonts.bodySemiBold,
-    fontSize: 15,
-    color: Theme.colors.textPrimary,
-  },
-  emptyBody: {
-    fontFamily: Theme.fonts.bodyRegular,
-    fontSize: 13,
-    color: Theme.colors.textSecondary,
-    textAlign: 'center',
-    paddingHorizontal: Theme.spacing.xl,
-    lineHeight: 20,
-  },
-  retryBtn: {
-    marginTop: Theme.spacing.sm,
-    paddingHorizontal: Theme.spacing.xl,
-    paddingVertical: Theme.spacing.md,
-    borderRadius: Theme.radius.md,
-    backgroundColor: Theme.colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: Theme.colors.surfaceBorder,
+  },
+
+  // Skeletons
+  skeletonList: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[4],
+    gap: Spacing[3],
+  },
+
+  // Pinned Bottom Bar
+  pinnedBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.surface['2'],
+    borderTopWidth: 1,
+    borderTopColor: Colors.hairline,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.screen,
+    paddingVertical: 12,
   },
-  retryBtnText: {
-    fontFamily: Theme.fonts.bodySemiBold,
+  pinnedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[3],
+  },
+  pinnedRankPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface['1'],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  pinnedRankPillActive: {
+    backgroundColor: 'rgba(34,211,238,0.12)',
+    borderColor: Colors.accent.cyan,
+  },
+  pinnedRankText: {
+    fontWeight: '800',
     fontSize: 13,
-    color: Theme.colors.textPrimary,
+  },
+  pinnedDetails: {
+    gap: 2,
+  },
+  pinnedRight: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  pinnedMetric: {
+    fontWeight: '700',
+    fontSize: 15,
+  },
+
+  // Diagnostic Modal
+  modalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+  },
+  modalSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.surface['2'],
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[3],
+    borderTopWidth: 1,
+    borderTopColor: Colors.hairline,
+    gap: Spacing[4],
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.hairline,
+    alignSelf: 'center',
+    marginBottom: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[2],
+  },
+  modalRunning: {
+    paddingVertical: Spacing[4],
+    alignItems: 'center',
+  },
+  diagResults: {
+    gap: Spacing[3],
+  },
+  diagRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
+  },
+  diagErrorBox: {
+    padding: Spacing[3],
+    borderRadius: Radius.sm,
+    backgroundColor: 'rgba(244,63,94,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(244,63,94,0.20)',
+  },
+  dashboardChecklist: {
+    padding: Spacing[3],
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.surface['1'],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    gap: 4,
+    marginTop: 4,
+  },
+  modalCloseBtn: {
+    marginTop: Spacing[2],
   },
 });

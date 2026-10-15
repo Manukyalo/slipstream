@@ -12,11 +12,25 @@
       "expo-secure-store",
       "expo-updates",
       [
+        "expo-font",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/space-grotesk/500Medium/SpaceGrotesk_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/space-grotesk/600SemiBold/SpaceGrotesk_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/space-grotesk/700Bold/SpaceGrotesk_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf"
+          ]
+        }
+      ],
+      [
         "expo-splash-screen",
         {
-          "backgroundColor": "#080B14",
-          "image": "./assets/splash-icon.png",
-          "imageWidth": 200
+          "backgroundColor": "#05070D",
+          "image": "./assets/splash-mark.png",
+          "imageWidth": 180,
+          "resizeMode": "contain"
         }
       ],
       [
@@ -29,10 +43,10 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "@maplibre/maplibre-react-native",
       "expo-sharing",
       "expo-sqlite",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "runtimeVersion": {
       "policy": "appVersion"
@@ -51,14 +65,16 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.slipstream.app",
+      "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:slipstream-app.vercel.app",
         "applinks:slipstream.app",
         "applinks:www.slipstream.app"
       ],
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Slipstream records your trip route and detects radar zones. Location runs in the background so recording continues when the screen is off.",
-        "NSLocationWhenInUsePermission": "Slipstream uses your location to display your map position and record trips.",
+        "NSLocationWhenInUseUsageDescription": "Slipstream uses your location to display your map position and record trips.",
         "NSLocationAlwaysUsageDescription": "Slipstream records your trip route in the background so you don't have to keep the screen on while driving.",
         "UIBackgroundModes": [
           "location",
@@ -69,8 +85,9 @@
     "android": {
       "package": "com.slipstream.app",
       "adaptiveIcon": {
-        "backgroundColor": "#080B14",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "backgroundColor": "#05070D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "intentFilters": [
         {

@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Colors } from '@/constants/theme';
+import { Colors as DesignColors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Icon } from '@/components/ui/Icon';
 
 interface LocationConsentModalProps {
   visible: boolean;
@@ -23,7 +25,7 @@ export function LocationConsentModal({
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.iconCircle}>
-            <Text style={styles.iconText}>🛰️</Text>
+            <Icon name="map-pin" size={28} color={Colors.accent.cyan} weight="duotone" />
           </View>
 
           <Text style={styles.title}>Background Location Access</Text>
@@ -36,9 +38,12 @@ export function LocationConsentModal({
           </Text>
 
           <View style={styles.privacyNote}>
-            <Text style={styles.privacyText}>
-              🔒 Your raw per-second GPS points are purged after 30 days to protect your privacy. Location data is never sold or used for advertising.
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+              <Icon name="shield" size={16} color={Colors.accent.cyan} weight="duotone" style={{ marginTop: 2 }} />
+              <Text style={styles.privacyText}>
+                Your raw per-second GPS points are purged after 30 days to protect your privacy. Location data is never sold or used for advertising.
+              </Text>
+            </View>
           </View>
 
           <View style={styles.actions}>
@@ -72,10 +77,10 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: Colors.bgSurface,
+    backgroundColor: DesignColors.bgSurface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: DesignColors.border,
     padding: Spacing.xl,
     alignItems: 'center',
   },
@@ -83,12 +88,12 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: Colors.accentCyanDim,
+    backgroundColor: DesignColors.accentCyanDim,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
+    borderColor: DesignColors.accentCyan,
   },
   iconText: {
     fontSize: 28,
@@ -96,34 +101,34 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.h2,
-    color: Colors.textPrimary,
+    color: DesignColors.textPrimary,
     textAlign: 'center',
     marginBottom: Spacing.md,
   },
   body: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.body,
-    color: Colors.textSecondary,
+    color: DesignColors.textSecondary,
     lineHeight: 22,
     marginBottom: Spacing.md,
   },
   highlight: {
     fontFamily: FontFamily.semiBold,
-    color: Colors.accentCyan,
+    color: DesignColors.accentCyan,
   },
   privacyNote: {
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: DesignColors.bgElevated,
     borderRadius: Radius.sm,
     padding: Spacing.md,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: DesignColors.border,
     marginBottom: Spacing.xl,
     width: '100%',
   },
   privacyText: {
     fontFamily: FontFamily.regular,
     fontSize: FontSize.caption,
-    color: Colors.textMuted,
+    color: DesignColors.textMuted,
     lineHeight: 18,
   },
   actions: {
@@ -135,27 +140,27 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: DesignColors.bgElevated,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: DesignColors.border,
     alignItems: 'center',
   },
   declineText: {
     fontFamily: FontFamily.medium,
     fontSize: FontSize.body,
-    color: Colors.textMuted,
+    color: DesignColors.textMuted,
   },
   acceptBtn: {
     flex: 1,
     paddingVertical: Spacing.md,
     borderRadius: Radius.md,
-    backgroundColor: Colors.accentCyan,
+    backgroundColor: DesignColors.accentCyan,
     alignItems: 'center',
   },
   acceptText: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.body,
-    color: Colors.bgBase,
+    color: DesignColors.bgBase,
   },
   btnPressed: {
     opacity: 0.8,

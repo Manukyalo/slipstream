@@ -84,6 +84,7 @@ export async function saveDragRun(input: SaveDragRunInput): Promise<DragRun> {
       top_speed: payload.top_speed ?? 0,
       recorded_at: new Date().toISOString(),
       client_id: clientId,
+      run_type: payload.run_type ?? 'quarter_mile',
     }
   );
 }

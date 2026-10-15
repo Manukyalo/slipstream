@@ -19,13 +19,15 @@ export const MAINTENANCE_TYPE_LABELS: Record<MaintenanceType, string> = {
   other: 'General Repair / Other',
 };
 
-export const MAINTENANCE_TYPE_ICONS: Record<MaintenanceType, string> = {
-  oil_change: '🛢️',
-  tires: '🛞',
-  brakes: '🛑',
-  battery: '🔋',
-  inspection: '🔍',
-  other: '🔧',
+import type { IconName } from '@/components/ui/Icon';
+
+export const MAINTENANCE_TYPE_ICONS: Record<MaintenanceType, IconName> = {
+  oil_change: 'gear',
+  tires: 'speedometer',
+  brakes: 'warning',
+  battery: 'lightning',
+  inspection: 'search',
+  other: 'wrench',
 };
 
 export interface CreateMaintenanceLogInput {

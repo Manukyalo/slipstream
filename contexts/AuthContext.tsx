@@ -6,11 +6,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Profile } from '@/types/database';
+import { createVehicle } from '@/services/vehicles';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -20,6 +24,16 @@ WebBrowser.maybeCompleteAuthSession();
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
+export interface OnboardingData {
+  handle: string;
+  vehicle?: {
+    make: string;
+    model: string;
+    year: number;
+  } | null;
+  speedUnit: 'kmh' | 'mph';
+}
+
 interface AuthContextValue {
   status: AuthStatus;
   session: Session | null;
@@ -27,9 +41,19 @@ interface AuthContextValue {
   profile: Profile | null;
   /** Sign in with Google via OAuth browser session */
   signInWithGoogle: () => Promise<AuthError | null>;
-  /** Sign in with email + password */
+  /** Sign in with Apple via native modal + Supabase ID token */
+  signInWithApple: () => Promise<AuthError | null>;
+  /** Send a passwordless 6-digit OTP code to the given email */
+  sendEmailOtp: (email: string) => Promise<AuthError | null>;
+  /** Verify the 6-digit email OTP code */
+  verifyEmailOtp: (email: string, token: string) => Promise<AuthError | null>;
+  /** Link external identity (Google / Apple) to current authenticated account */
+  linkIdentity: (provider: 'google' | 'apple') => Promise<AuthError | null>;
+  /** Complete initial onboarding profile, vehicle, and units */
+  completeOnboarding: (data: OnboardingData) => Promise<{ success: boolean; error?: string }>;
+  /** Sign in with email + password (legacy fallback) */
   signInWithEmail: (email: string, password: string) => Promise<AuthError | null>;
-  /** Sign up with email + password, with optional referral attribution code */
+  /** Sign up with email + password (legacy fallback) */
   signUpWithEmail: (email: string, password: string, referralCode?: string) => Promise<AuthError | null>;
   /** Sign out */
   signOut: () => Promise<void>;
@@ -124,6 +148,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = useCallback(async (): Promise<AuthError | null> => {
     try {
       const redirectUrl = Linking.createURL('auth/callback');
+
+      // If already signed in, link account instead of replacing
+      if (session?.user) {
+        const { data, error } = await supabase.auth.linkIdentity({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+          },
+        });
+        if (error) return error;
+        if (data?.url) {
+          await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+        }
+        return null;
+      }
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -165,7 +205,159 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err: unknown) {
       return err as AuthError;
     }
+  }, [session]);
+
+  const signInWithApple = useCallback(async (): Promise<AuthError | null> => {
+    try {
+      if (Platform.OS !== 'ios') {
+        return new Error('Sign in with Apple is only supported on iOS devices.') as unknown as AuthError;
+      }
+
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        return new Error('Apple Authentication is not available on this device.') as unknown as AuthError;
+      }
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        return new Error('No identity token returned from Apple.') as unknown as AuthError;
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) return error;
+
+      // When Apple provides fullName (first sign-in only), update profile if not already set
+      if (credential.fullName && data.user) {
+        const given = credential.fullName.givenName || '';
+        const family = credential.fullName.familyName || '';
+        const fullName = `${given} ${family}`.trim();
+
+        if (fullName) {
+          await supabase
+            .from('profiles')
+            .update({ display_name: fullName })
+            .eq('id', data.user.id);
+        }
+      }
+
+      return null;
+    } catch (err: unknown) {
+      // User cancelled modal
+      if ((err as { code?: string })?.code === 'ERR_REQUEST_CANCELED') {
+        return null;
+      }
+      return err as AuthError;
+    }
   }, []);
+
+  const sendEmailOtp = useCallback(async (email: string): Promise<AuthError | null> => {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          shouldCreateUser: true,
+        },
+      });
+      return error;
+    } catch (err: unknown) {
+      return err as AuthError;
+    }
+  }, []);
+
+  const verifyEmailOtp = useCallback(
+    async (email: string, token: string): Promise<AuthError | null> => {
+      try {
+        const { error } = await supabase.auth.verifyOtp({
+          email: email.trim().toLowerCase(),
+          token: token.trim(),
+          type: 'email',
+        });
+        return error;
+      } catch (err: unknown) {
+        return err as AuthError;
+      }
+    },
+    [],
+  );
+
+  const linkIdentity = useCallback(
+    async (provider: 'google' | 'apple'): Promise<AuthError | null> => {
+      if (provider === 'apple') {
+        return signInWithApple();
+      }
+      return signInWithGoogle();
+    },
+    [signInWithApple, signInWithGoogle],
+  );
+
+  const completeOnboarding = useCallback(
+    async (data: OnboardingData): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const currentUserId = session?.user?.id;
+        if (!currentUserId) {
+          return { success: false, error: 'User is not authenticated.' };
+        }
+
+        const cleanHandle = data.handle.trim().replace(/^@/, '');
+
+        // 1. Update display_name in profiles table
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ display_name: cleanHandle })
+          .eq('id', currentUserId);
+
+        if (profileError) {
+          return { success: false, error: profileError.message };
+        }
+
+        // 2. Add vehicle if provided
+        if (data.vehicle && data.vehicle.make && data.vehicle.model) {
+          try {
+            await createVehicle({
+              userId: currentUserId,
+              make: data.vehicle.make,
+              model: data.vehicle.model,
+              year: data.vehicle.year || new Date().getFullYear(),
+              isPrimary: true,
+            });
+          } catch (vehErr) {
+            console.warn('[Auth] Vehicle creation warning during onboarding:', vehErr);
+          }
+        }
+
+        // 3. Persist units to local storage & Supabase user metadata
+        await AsyncStorage.setItem('@slipstream/units', data.speedUnit);
+        await supabase.auth.updateUser({
+          data: {
+            speed_unit: data.speedUnit,
+            onboarding_completed: true,
+          },
+        });
+
+        // 4. Mark local onboarding completion flag
+        await AsyncStorage.setItem(`@slipstream/onboarded_${currentUserId}`, 'true');
+
+        // 5. Refresh cached profile
+        await fetchProfile(currentUserId);
+
+        return { success: true };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Failed to complete onboarding.';
+        return { success: false, error: msg };
+      }
+    },
+    [session, fetchProfile],
+  );
 
   const signInWithEmail = useCallback(
     async (email: string, password: string): Promise<AuthError | null> => {
@@ -200,6 +392,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: session?.user ?? null,
         profile,
         signInWithGoogle,
+        signInWithApple,
+        sendEmailOtp,
+        verifyEmailOtp,
+        linkIdentity,
+        completeOnboarding,
         signInWithEmail,
         signUpWithEmail,
         signOut,

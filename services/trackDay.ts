@@ -21,6 +21,10 @@ export interface Track {
   startFinishHeading: number | null;
   sectorPoints: SectorPoint[];
   isPublic: boolean;
+  lengthMeters?: number;
+  outlinePoints?: TrackPoint[];
+  bestLapMs?: number | null;
+  lapCount?: number;
   distanceMeters?: number;
 }
 
@@ -55,6 +59,8 @@ export async function createTrack(input: {
   startFinishPoint: TrackPoint;
   startFinishHeading?: number | null;
   sectorPoints?: SectorPoint[];
+  lengthMeters?: number;
+  outlinePoints?: TrackPoint[];
   isPublic?: boolean;
 }): Promise<Track> {
   const { data: { user } } = await supabase.auth.getUser();
@@ -65,18 +71,18 @@ export async function createTrack(input: {
     throw new Error('Track name must be between 2 and 100 characters');
   }
 
-  const { data, error } = await supabase
-    .from('tracks')
+  const { data, error } = await (supabase
+    .from('tracks') as any)
     .insert({
       creator_id: user.id,
       name,
       location_name: input.locationName?.trim() || null,
-      // PostGIS expects POINT(lon lat) string or use ST_MakePoint via RPC.
-      // Supabase geography columns accept GeoJSON or WKT from the client.
       start_finish_point: `POINT(${input.startFinishPoint.lon} ${input.startFinishPoint.lat})`,
       start_finish_heading: input.startFinishHeading ?? null,
       sector_points: JSON.stringify(input.sectorPoints ?? []),
-      is_public: input.isPublic ?? true,
+      length_meters: input.lengthMeters ?? 0,
+      outline_points: JSON.stringify(input.outlinePoints ?? []),
+      is_public: input.isPublic ?? false, // Default private per Task 3
     })
     .select()
     .single();
@@ -206,67 +212,17 @@ export async function deleteLap(lapId: string): Promise<void> {
   if (error) throw new Error(`Failed to delete lap: ${error.message}`);
 }
 
-// ─── Geometry Helpers ─────────────────────────────────────────────────────────
-
-/**
- * Returns the great-circle distance between two WGS-84 points in metres.
- * Uses the Haversine formula — accurate enough for track crossing detection.
- */
-export function haversineMeters(
-  lat1: number, lon1: number,
-  lat2: number, lon2: number,
-): number {
-  const R = 6_371_000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Returns the absolute angular difference between two headings [0, 180].
- */
-export function headingDiff(a: number, b: number): number {
-  const diff = Math.abs(a - b) % 360;
-  return diff > 180 ? 360 - diff : diff;
-}
-
-/**
- * Determines if the current GPS position counts as crossing a defined gate.
- * Conditions:
- *  1. Distance from gate centre < CROSSING_RADIUS_METERS
- *  2. If gate has a required heading, current heading must be within HEADING_TOLERANCE
- *  3. The car must have been outside the crossing radius before (prevents re-trigger)
- */
-export const CROSSING_RADIUS_METERS = 30; // tight for start/finish accuracy
-export const HEADING_TOLERANCE_DEG  = 40; // ± 40° around defined heading
-
-export function isCrossingGate(opts: {
-  currentLat: number;
-  currentLon: number;
-  currentHeading: number | null;
-  gateLat: number;
-  gateLon: number;
-  gateHeading: number | null;
-}): boolean {
-  const dist = haversineMeters(
-    opts.currentLat, opts.currentLon,
-    opts.gateLat,    opts.gateLon,
-  );
-
-  if (dist > CROSSING_RADIUS_METERS) return false;
-
-  if (opts.gateHeading !== null && opts.currentHeading !== null) {
-    const diff = headingDiff(opts.currentHeading, opts.gateHeading);
-    if (diff > HEADING_TOLERANCE_DEG) return false;
-  }
-
-  return true;
-}
+// ─── Geometry & Timing Helpers (delegated to @/utils/lapTiming) ────────────────
+export {
+  CROSSING_RADIUS_METERS,
+  HEADING_TOLERANCE_DEG,
+  haversineMeters,
+  headingDiff,
+  isCrossingGate,
+  detectSegmentCrossing,
+  formatLapTime,
+  lapDelta,
+} from '@/utils/lapTiming';
 
 // ─── Row mappers ─────────────────────────────────────────────────────────────
 
@@ -291,7 +247,11 @@ function rowToTrack(row: any): Track {
     startFinishPoint: point,
     startFinishHeading: row.start_finish_heading ?? null,
     sectorPoints: parseJsonb<SectorPoint[]>(row.sector_points, []),
-    isPublic: row.is_public ?? true,
+    isPublic: row.is_public ?? false,
+    lengthMeters: row.length_meters ? Number(row.length_meters) : undefined,
+    outlinePoints: parseJsonb<TrackPoint[]>(row.outline_points, []),
+    bestLapMs: row.best_lap_ms ? Number(row.best_lap_ms) : null,
+    lapCount: row.lap_count ? Number(row.lap_count) : 0,
     distanceMeters: row.distance_meters ?? undefined,
   };
 }
@@ -311,7 +271,11 @@ function rpcRowToTrack(row: any): Track {
     startFinishPoint: point,
     startFinishHeading: row.start_finish_heading ?? null,
     sectorPoints: parseJsonb<SectorPoint[]>(row.sector_points, []),
-    isPublic: row.is_public ?? true,
+    isPublic: row.is_public ?? false,
+    lengthMeters: row.length_meters ? Number(row.length_meters) : undefined,
+    outlinePoints: parseJsonb<TrackPoint[]>(row.outline_points, []),
+    bestLapMs: row.best_lap_ms ? Number(row.best_lap_ms) : null,
+    lapCount: row.lap_count ? Number(row.lap_count) : 0,
     distanceMeters: row.distance_meters ?? undefined,
   };
 }
@@ -337,19 +301,4 @@ function parseJsonb<T>(value: unknown, fallback: T): T {
   }
   if (value && typeof value === 'object') return value as T;
   return fallback;
-}
-
-/** Format milliseconds as M:SS.mmm */
-export function formatLapTime(ms: number): string {
-  const totalSeconds = ms / 1000;
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = Math.floor(totalSeconds % 60);
-  const millis = Math.floor(ms % 1000);
-  return `${mins}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
-}
-
-/** Returns the delta string vs best lap: e.g. "+0.412" or "-0.050" */
-export function lapDelta(lapMs: number, bestMs: number): string {
-  const delta = (lapMs - bestMs) / 1000;
-  return delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3);
 }

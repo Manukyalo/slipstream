@@ -12,8 +12,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants/design';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { saveRoad, formatRoadLength, type SavedRoad } from '@/services/savedRoads';
+import { Icon } from '@/components/ui/Icon';
+import { toUserMessage } from '@/utils/toUserMessage';
 
 interface SaveRoadModalProps {
   visible: boolean;
@@ -32,7 +34,8 @@ export function SaveRoadModal({
 }: SaveRoadModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [isPublic, setIsPublic] = useState(true);
+  // Task 5: Default private
+  const [isPublic, setIsPublic] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -56,13 +59,16 @@ export function SaveRoadModal({
         isPublic,
       });
 
-      Alert.alert('Road Saved', `"${road.name}" added to your favorite roads!`);
+      Alert.alert(
+        'Road Saved',
+        `"${road.name}" added to your saved roads${isPublic ? ' and shared with community' : ' (private)'}!`,
+      );
       setName('');
       setDescription('');
       onSaved?.(road);
       onClose();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
+      const msg = toUserMessage(err);
       Alert.alert('Save Failed', msg);
     } finally {
       setIsSaving(false);
@@ -93,8 +99,10 @@ export function SaveRoadModal({
               onPress={onClose}
               style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
               hitSlop={12}
+              accessibilityLabel="Close"
+              accessibilityRole="button"
             >
-              <Text style={styles.closeText}>✕</Text>
+              <Icon name="close" size={18} color={Colors.text.secondary} />
             </Pressable>
           </View>
 
@@ -104,20 +112,20 @@ export function SaveRoadModal({
             <TextInput
               style={styles.input}
               placeholder="e.g. Angeles Crest Highway"
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={Colors.text.tertiary}
               value={name}
               onChangeText={setName}
               maxLength={100}
               autoFocus
             />
 
-            <Text style={[styles.label, { marginTop: Spacing.md }]}>
+            <Text style={[styles.label, { marginTop: Spacing[4] }]}>
               NOTES / DESCRIPTION (OPTIONAL)
             </Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               placeholder="e.g. High elevation, smooth tarmac, best at sunrise"
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={Colors.text.tertiary}
               value={description}
               onChangeText={setDescription}
               maxLength={500}
@@ -125,23 +133,40 @@ export function SaveRoadModal({
               numberOfLines={3}
             />
 
-            {/* Public toggle */}
+            {/* Public toggle (default private) */}
             <View style={styles.toggleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Share with Community</Text>
+                <View style={styles.toggleTitleRow}>
+                  <Text style={styles.toggleTitle}>Share with Community</Text>
+                  <View style={[styles.badge, isPublic ? styles.publicBadge : styles.privateBadge]}>
+                    <Text style={[styles.badgeText, isPublic ? styles.publicBadgeText : styles.privateBadgeText]}>
+                      {isPublic ? 'PUBLIC' : 'PRIVATE'}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={styles.toggleSub}>
                   {isPublic
-                    ? 'Visible to nearby drivers on Slipstream'
-                    : 'Private only to you'}
+                    ? 'Visible to nearby drivers on Slipstream.'
+                    : 'Private only to you. Hidden from nearby explorer.'}
                 </Text>
               </View>
               <Switch
                 value={isPublic}
                 onValueChange={setIsPublic}
-                trackColor={{ false: Colors.border, true: Colors.accentCyan }}
-                thumbColor={Colors.textPrimary}
+                trackColor={{ false: Colors.hairline, true: Colors.accent.cyan }}
+                thumbColor={isPublic ? '#05070D' : Colors.text.secondary}
               />
             </View>
+
+            {/* Server-side privacy guarantee callout */}
+            {isPublic && (
+              <View style={styles.privacyNotice}>
+                <Icon name="shield" size={16} color={Colors.accent.cyan} weight="duotone" />
+                <Text style={styles.privacyNoticeText}>
+                  Privacy Protected: Slipstream automatically trims the first & last 300 m on the server to prevent exposing home addresses.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Action buttons */}
@@ -160,7 +185,7 @@ export function SaveRoadModal({
               disabled={isSaving}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color={Colors.textInverse} />
+                <ActivityIndicator size="small" color="#05070D" />
               ) : (
                 <Text style={styles.saveBtnText}>Save Road</Text>
               )}
@@ -175,122 +200,164 @@ export function SaveRoadModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(5, 7, 13, 0.85)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: Colors.bgSurface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.lg,
+    backgroundColor: Colors.surface[1], // #0E131B
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+    padding: Spacing.screen,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: Colors.hairline,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing[4],
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.heading,
+    fontSize: 20,
+    color: Colors.text.primary,
   },
   sub: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    color: Colors.text.secondary,
     marginTop: 2,
+    fontVariant: ['tabular-nums'],
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
+    padding: 6,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface[2],
   },
   form: {
-    marginVertical: Spacing.sm,
+    marginBottom: Spacing.section,
   },
   label: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-    letterSpacing: 1,
-    marginBottom: Spacing.xs,
+    fontFamily: FontFamily.overline,
+    fontSize: 11,
+    color: Colors.text.tertiary,
+    letterSpacing: 0.8,
+    marginBottom: Spacing[2],
   },
   input: {
-    backgroundColor: Colors.bgBase,
+    backgroundColor: Colors.surface[2],
+    borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    color: Colors.textPrimary,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    borderColor: Colors.hairline,
+    color: Colors.text.primary,
+    fontFamily: FontFamily.body,
+    fontSize: 15,
+    paddingHorizontal: Spacing[3],
+    paddingVertical: Spacing[3],
   },
   textArea: {
-    height: 72,
+    height: 80,
     textAlignVertical: 'top',
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.lg,
-    paddingVertical: Spacing.xs,
+    backgroundColor: Colors.surface[2],
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    padding: Spacing[4],
+    marginTop: Spacing[4],
+    gap: Spacing.gap,
+  },
+  toggleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   toggleTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.heading,
+    fontSize: 14,
+    color: Colors.text.primary,
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
+  },
+  publicBadge: {
+    backgroundColor: Colors.tint.cyan,
+  },
+  privateBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  badgeText: {
+    fontFamily: FontFamily.heading,
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  publicBadgeText: {
+    color: Colors.accent.cyan,
+  },
+  privateBadgeText: {
+    color: Colors.text.secondary,
   },
   toggleSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.secondary,
+    marginTop: 3,
+  },
+  privacyNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: Colors.tint.cyan,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.25)',
+    borderRadius: Radius.card,
+    padding: Spacing[3],
+    marginTop: Spacing[3],
+  },
+  privacyNoticeText: {
+    flex: 1,
+    fontFamily: FontFamily.body,
+    fontSize: 11,
+    color: Colors.accent.cyan,
+    lineHeight: 16,
   },
   actions: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    marginTop: Spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? Spacing.lg : Spacing.sm,
+    gap: Spacing.gap,
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    paddingVertical: 14,
+    borderRadius: Radius.button,
+    backgroundColor: Colors.surface[2],
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.hairline,
   },
   cancelText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.label,
+    fontSize: 15,
+    color: Colors.text.secondary,
   },
   saveBtn: {
-    flex: 2,
-    backgroundColor: Colors.accentCyan,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
+    flex: 1.6,
+    paddingVertical: 14,
+    borderRadius: Radius.button,
+    backgroundColor: Colors.accent.cyan,
     alignItems: 'center',
     justifyContent: 'center',
   },
   saveBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textInverse,
-    letterSpacing: 0.5,
+    fontFamily: FontFamily.heading,
+    fontSize: 15,
+    color: '#05070D',
   },
   pressed: {
     opacity: 0.75,

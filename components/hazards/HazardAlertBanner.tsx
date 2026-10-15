@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/Icon';
 import { HAZARD_CONFIG, type NearbyHazard } from '@/services/hazards';
 
 interface HazardAlertBannerProps {
@@ -26,7 +27,7 @@ export function HazardAlertBanner({
         <View style={styles.topRow}>
           <View style={styles.leftInfo}>
             <View style={[styles.iconBox, { backgroundColor: `${cfg.color}25` }]}>
-              <Text style={styles.icon}>{cfg.icon}</Text>
+              <Icon name={cfg.icon} size={20} color={cfg.color} weight="fill" />
             </View>
 
             <View style={styles.textCol}>
@@ -52,13 +53,20 @@ export function HazardAlertBanner({
           <Pressable
             style={({ pressed }) => [styles.confirmBtn, pressed && styles.pressed]}
             onPress={onConfirm}
+            accessibilityRole="button"
+            accessibilityLabel="Confirm hazard is still active"
           >
-            <Text style={styles.confirmText}>✓ Still Active</Text>
+            <View style={styles.btnRow}>
+              <Icon name="check" size={14} color={Colors.semantic.success} weight="bold" />
+              <Text style={styles.confirmText}>Still Active</Text>
+            </View>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [styles.dismissBtn, pressed && styles.pressed]}
             onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss hazard alert"
           >
             <Text style={styles.dismissText}>Dismiss</Text>
           </Pressable>
@@ -70,7 +78,7 @@ export function HazardAlertBanner({
 
 const styles = StyleSheet.create({
   bannerWrapper: {
-    paddingHorizontal: Spacing.base,
+    paddingHorizontal: Spacing.screen,
     position: 'absolute',
     top: 54,
     left: 0,
@@ -78,10 +86,10 @@ const styles = StyleSheet.create({
     zIndex: 99,
   },
   banner: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
     borderWidth: 1.5,
-    padding: Spacing.md,
+    padding: Spacing.gap,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -92,7 +100,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing[2],
   },
   leftInfo: {
     flexDirection: 'row',
@@ -105,7 +113,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.md,
+    marginRight: Spacing.gap,
   },
   icon: {
     fontSize: 20,
@@ -116,70 +124,76 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing[1],
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
+    fontFamily: FontFamily.display,
+    fontSize: 13,
     letterSpacing: 0.5,
   },
   verifiedBadge: {
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Colors.surface['2'],
     paddingHorizontal: 6,
     paddingVertical: 1,
-    borderRadius: Radius.xs,
+    borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.hairline,
   },
   verifiedText: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.display,
     fontSize: 8,
-    color: Colors.accentCyan,
+    color: Colors.accent.cyan,
     letterSpacing: 0.5,
   },
   distanceText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.label,
+    fontSize: 12,
+    color: Colors.text.primary,
     marginTop: 2,
   },
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    paddingTop: Spacing.xs,
+    gap: Spacing[2],
+    paddingTop: Spacing[1],
     borderTopWidth: 1,
-    borderTopColor: Colors.borderSubtle,
+    borderTopColor: Colors.hairline,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing[1],
   },
   confirmBtn: {
     flex: 2,
-    backgroundColor: Colors.accentCyanDim,
-    borderColor: Colors.accentCyan,
+    backgroundColor: Colors.tint.cyan,
+    borderColor: Colors.accent.cyan,
     borderWidth: 1,
     borderRadius: Radius.sm,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing[1],
     alignItems: 'center',
   },
   confirmText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.heading,
+    fontSize: 12,
+    color: Colors.accent.cyan,
   },
   dismissBtn: {
     flex: 1,
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Colors.surface['2'],
     borderRadius: Radius.sm,
-    paddingVertical: Spacing.xs,
+    paddingVertical: Spacing[1],
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.hairline,
   },
   dismissText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.label,
+    fontSize: 12,
+    color: Colors.text.secondary,
   },
   pressed: {
     opacity: 0.7,
   },
 });
+

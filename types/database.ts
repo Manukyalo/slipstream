@@ -10,18 +10,18 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
       drag_runs: {
         Row: {
-          client_id?: string | null
+          client_id: string | null
           distance_type: string
           elapsed_ms: number
           id: string
           recorded_at: string
-          run_type?: string
+          run_type: string
           top_speed: number
           user_id: string
           vehicle_id: string | null
@@ -86,7 +86,7 @@ export type Database = {
       }
       hazard_reports: {
         Row: {
-          client_id?: string | null
+          client_id: string | null
           confirmations: number
           expires_at: string
           id: string
@@ -116,6 +116,54 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      laps: {
+        Row: {
+          id: string
+          lap_time_ms: number
+          path_points: Json
+          recorded_at: string
+          sector_times: Json
+          track_id: string
+          user_id: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          id?: string
+          lap_time_ms: number
+          path_points?: Json
+          recorded_at?: string
+          sector_times?: Json
+          track_id: string
+          user_id: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          id?: string
+          lap_time_ms?: number
+          path_points?: Json
+          recorded_at?: string
+          sector_times?: Json
+          track_id?: string
+          user_id?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "laps_track_id_fkey"
+            columns: ["track_id"]
+            isOneToOne: false
+            referencedRelation: "tracks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "laps_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       maintenance_logs: {
         Row: {
@@ -167,6 +215,95 @@ export type Database = {
           },
         ]
       }
+      payment_ledger: {
+        Row: {
+          created_at: string
+          id: string
+          new_status: Database["public"]["Enums"]["payment_status"]
+          note: string | null
+          payment_id: string
+          previous_status: Database["public"]["Enums"]["payment_status"] | null
+          provider_event_id: string | null
+          raw_payload: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          new_status: Database["public"]["Enums"]["payment_status"]
+          note?: string | null
+          payment_id: string
+          previous_status?: Database["public"]["Enums"]["payment_status"] | null
+          provider_event_id?: string | null
+          raw_payload?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          new_status?: Database["public"]["Enums"]["payment_status"]
+          note?: string | null
+          payment_id?: string
+          previous_status?: Database["public"]["Enums"]["payment_status"] | null
+          provider_event_id?: string | null
+          raw_payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_ledger_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          error_message: string | null
+          id: string
+          idempotency_key: string
+          phone_masked: string | null
+          provider: string
+          provider_tx_id: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          tier_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency: string
+          error_message?: string | null
+          id?: string
+          idempotency_key: string
+          phone_masked?: string | null
+          provider: string
+          provider_tx_id?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string
+          phone_masked?: string | null
+          provider?: string
+          provider_tx_id?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -174,6 +311,8 @@ export type Database = {
           display_name: string | null
           id: string
           referral_code: string | null
+          supporter_badge: string | null
+          supporter_tier: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -181,6 +320,8 @@ export type Database = {
           display_name?: string | null
           id: string
           referral_code?: string | null
+          supporter_badge?: string | null
+          supporter_tier?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -188,6 +329,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           referral_code?: string | null
+          supporter_badge?: string | null
+          supporter_tier?: string | null
         }
         Relationships: []
       }
@@ -230,6 +373,95 @@ export type Database = {
           },
         ]
       }
+      saved_road_reports: {
+        Row: {
+          created_at: string
+          details: string | null
+          id: string
+          reason: string
+          reporter_id: string
+          road_id: string
+        }
+        Insert: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+          road_id: string
+        }
+        Update: {
+          created_at?: string
+          details?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+          road_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_road_reports_road_id_fkey"
+            columns: ["road_id"]
+            isOneToOne: false
+            referencedRelation: "saved_roads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      saved_roads: {
+        Row: {
+          best_avg_speed_kmh: number | null
+          centroid: unknown
+          created_at: string
+          curviness_score: number | null
+          description: string | null
+          elevation_gain_m: number | null
+          id: string
+          is_public: boolean
+          length_meters: number | null
+          name: string
+          route: unknown
+          saved_count: number | null
+          surface_type: string | null
+          tags: string[] | null
+          user_id: string
+        }
+        Insert: {
+          best_avg_speed_kmh?: number | null
+          centroid?: unknown
+          created_at?: string
+          curviness_score?: number | null
+          description?: string | null
+          elevation_gain_m?: number | null
+          id?: string
+          is_public?: boolean
+          length_meters?: number | null
+          name: string
+          route: unknown
+          saved_count?: number | null
+          surface_type?: string | null
+          tags?: string[] | null
+          user_id: string
+        }
+        Update: {
+          best_avg_speed_kmh?: number | null
+          centroid?: unknown
+          created_at?: string
+          curviness_score?: number | null
+          description?: string | null
+          elevation_gain_m?: number | null
+          id?: string
+          is_public?: boolean
+          length_meters?: number | null
+          name?: string
+          route?: unknown
+          saved_count?: number | null
+          surface_type?: string | null
+          tags?: string[] | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -254,10 +486,61 @@ export type Database = {
         }
         Relationships: []
       }
+      tracks: {
+        Row: {
+          best_lap_ms: number | null
+          created_at: string
+          creator_id: string
+          id: string
+          is_public: boolean
+          lap_count: number | null
+          length_meters: number | null
+          location_name: string | null
+          name: string
+          outline_points: Json | null
+          sector_points: Json
+          start_finish_heading: number | null
+          start_finish_point: unknown
+          updated_at: string
+        }
+        Insert: {
+          best_lap_ms?: number | null
+          created_at?: string
+          creator_id: string
+          id?: string
+          is_public?: boolean
+          lap_count?: number | null
+          length_meters?: number | null
+          location_name?: string | null
+          name: string
+          outline_points?: Json | null
+          sector_points?: Json
+          start_finish_heading?: number | null
+          start_finish_point: unknown
+          updated_at?: string
+        }
+        Update: {
+          best_lap_ms?: number | null
+          created_at?: string
+          creator_id?: string
+          id?: string
+          is_public?: boolean
+          lap_count?: number | null
+          length_meters?: number | null
+          location_name?: string | null
+          name?: string
+          outline_points?: Json | null
+          sector_points?: Json
+          start_finish_heading?: number | null
+          start_finish_point?: unknown
+          updated_at?: string
+        }
+        Relationships: []
+      }
       trips: {
         Row: {
           avg_speed: number
-          client_id?: string | null
+          client_id: string | null
           created_at: string
           distance_m: number
           duration_s: number
@@ -299,6 +582,54 @@ export type Database = {
           top_speed?: number
           user_id?: string
           vehicle_id?: string | null
+        }
+        Relationships: []
+      }
+      user_privacy_zones: {
+        Row: {
+          created_at: string
+          id: string
+          location: unknown
+          name: string
+          radius_m: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          location: unknown
+          name?: string
+          radius_m?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          location?: unknown
+          name?: string
+          radius_m?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_rate_limits: {
+        Row: {
+          action: string
+          hit_count: number
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          hit_count?: number
+          user_id: string
+          window_start?: string
+        }
+        Update: {
+          action?: string
+          hit_count?: number
+          user_id?: string
+          window_start?: string
         }
         Relationships: []
       }
@@ -351,6 +682,7 @@ export type Database = {
           make: string
           model: string
           nickname: string | null
+          odometer: number | null
           photo_url: string | null
           user_id: string
           year: number
@@ -362,6 +694,7 @@ export type Database = {
           make: string
           model: string
           nickname?: string | null
+          odometer?: number | null
           photo_url?: string | null
           user_id: string
           year: number
@@ -373,132 +706,10 @@ export type Database = {
           make?: string
           model?: string
           nickname?: string | null
+          odometer?: number | null
           photo_url?: string | null
           user_id?: string
           year?: number
-        }
-        Relationships: []
-      }
-      tracks: {
-        Row: {
-          created_at: string
-          creator_id: string
-          id: string
-          is_public: boolean
-          location_name: string | null
-          name: string
-          sector_points: Json
-          start_finish_heading: number | null
-          start_finish_point: unknown
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          creator_id: string
-          id?: string
-          is_public?: boolean
-          location_name?: string | null
-          name: string
-          sector_points?: Json
-          start_finish_heading?: number | null
-          start_finish_point: unknown
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          creator_id?: string
-          id?: string
-          is_public?: boolean
-          location_name?: string | null
-          name?: string
-          sector_points?: Json
-          start_finish_heading?: number | null
-          start_finish_point?: unknown
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      laps: {
-        Row: {
-          id: string
-          lap_time_ms: number
-          path_points: Json
-          recorded_at: string
-          sector_times: Json
-          track_id: string
-          user_id: string
-          vehicle_id: string | null
-        }
-        Insert: {
-          id?: string
-          lap_time_ms: number
-          path_points?: Json
-          recorded_at?: string
-          sector_times?: Json
-          track_id: string
-          user_id: string
-          vehicle_id?: string | null
-        }
-        Update: {
-          id?: string
-          lap_time_ms?: number
-          path_points?: Json
-          recorded_at?: string
-          sector_times?: Json
-          track_id?: string
-          user_id?: string
-          vehicle_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "laps_track_id_fkey"
-            columns: ["track_id"]
-            isOneToOne: false
-            referencedRelation: "tracks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "laps_vehicle_id_fkey"
-            columns: ["vehicle_id"]
-            isOneToOne: false
-            referencedRelation: "vehicles"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      saved_roads: {
-        Row: {
-          centroid: unknown
-          created_at: string
-          description: string | null
-          id: string
-          is_public: boolean
-          length_meters: number
-          name: string
-          route: unknown
-          user_id: string
-        }
-        Insert: {
-          centroid?: unknown
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_public?: boolean
-          length_meters?: number
-          name: string
-          route: unknown
-          user_id: string
-        }
-        Update: {
-          centroid?: unknown
-          created_at?: string
-          description?: string | null
-          id?: string
-          is_public?: boolean
-          length_meters?: number
-          name?: string
-          route?: unknown
-          user_id?: string
         }
         Relationships: []
       }
@@ -548,53 +759,6 @@ export type Database = {
       }
     }
     Functions: {
-      get_nearby_roads: {
-        Args: {
-          p_lon: number
-          p_lat: number
-          p_radius?: number
-        }
-        Returns: {
-          id: string
-          user_id: string
-          name: string
-          description: string | null
-          is_public: boolean
-          length_meters: number
-          distance_meters: number
-          route_wkt: string | null
-        }[]
-      }
-      get_nearby_tracks: {
-        Args: {
-          p_lon: number
-          p_lat: number
-          p_radius?: number
-        }
-        Returns: {
-          id: string
-          name: string
-          location_name: string | null
-          creator_id: string
-          start_finish_point: Json
-          start_finish_heading: number | null
-          sector_points: Json
-          is_public: boolean
-          distance_meters: number
-        }[]
-      }
-      get_track_personal_bests: {
-        Args: {
-          p_track_id: string
-          p_user_id?: string | null
-        }
-        Returns: {
-          total_laps: number
-          best_lap_ms: number | null
-          avg_lap_ms: number | null
-          last_session: string | null
-        }
-      }
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -722,38 +886,25 @@ export type Database = {
             }
             Returns: string
           }
+      attach_drives_to_vehicle: {
+        Args: { p_trip_ids?: string[]; p_vehicle_id: string }
+        Returns: number
+      }
+      check_rate_limit: {
+        Args: {
+          p_action: string
+          p_max_hits: number
+          p_user_id: string
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       claim_referral_code: {
         Args: { referral_code_input: string }
         Returns: Json
       }
       confirm_hazard: { Args: { target_hazard_id: string }; Returns: number }
-      delete_user_account: { Args: Record<string, never>; Returns: boolean }
-      export_user_data: { Args: Record<string, never>; Returns: Json }
-      purge_old_speed_samples: { Args: { p_days_old?: number }; Returns: number }
-      get_sprint_leaderboard: {
-        Args: {
-          sprint_type?: string
-          scope_type?: string
-          filter_make?: string | null
-          filter_model?: string | null
-          limit_count?: number
-        }
-        Returns: {
-          rank: number
-          user_id: string
-          display_name: string
-          elapsed_ms: number
-          top_speed: number
-          vehicle_make: string
-          vehicle_model: string
-          vehicle_year: number
-          recorded_at: string
-        }[]
-      }
-      get_vehicle_maintenance_summary: {
-        Args: { p_vehicle_id: string }
-        Returns: Json
-      }
+      delete_user_account: { Args: never; Returns: boolean }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -787,6 +938,8 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      export_user_data: { Args: never; Returns: Json }
+      generate_unique_referral_code: { Args: never; Returns: string }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -885,43 +1038,107 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
-      get_distance_leaderboard: {
+      get_distance_leaderboard:
+        | {
+            Args: {
+              filter_make?: string
+              filter_model?: string
+              limit_count?: number
+              scope_type?: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              make: string
+              model: string
+              rank: number
+              total_distance_m: number
+              total_trips: number
+              user_id: string
+            }[]
+          }
+        | {
+            Args: {
+              filter_make?: string | null
+              filter_model?: string | null
+              limit_count: number
+              offset_count: number
+              period_type: string
+              scope_type: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              make: string
+              model: string
+              rank: number
+              total_distance_m: number
+              total_trips: number
+              user_id: string
+            }[]
+          }
+      get_drag_leaderboard:
+        | {
+            Args: {
+              filter_make?: string
+              filter_model?: string
+              limit_count?: number
+              scope_type?: string
+              target_distance_type?: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              elapsed_ms: number
+              make: string
+              model: string
+              rank: number
+              recorded_at: string
+              top_speed: number
+              user_id: string
+              year: number
+            }[]
+          }
+        | {
+            Args: {
+              filter_make?: string | null
+              filter_model?: string | null
+              limit_count: number
+              offset_count: number
+              period_type: string
+              scope_type: string
+              target_distance_type: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              elapsed_ms: number
+              make: string
+              model: string
+              rank: number
+              recorded_at: string
+              top_speed: number
+              user_id: string
+              year: number
+            }[]
+          }
+      get_my_leaderboard_rank: {
         Args: {
-          filter_make?: string | null
-          filter_model?: string | null
-          limit_count?: number
-          scope_type?: string
-        }
-        Returns: {
-          avatar_url: string | null
-          display_name: string
-          make: string | null
-          model: string | null
-          rank: number
-          total_distance_m: number
-          total_trips: number
-          user_id: string
-        }[]
-      }
-      get_drag_leaderboard: {
-        Args: {
-          filter_make?: string | null
-          filter_model?: string | null
-          limit_count?: number
+          board_type: string
+          filter_make?: string
+          filter_model?: string
+          period_type?: string
           scope_type?: string
           target_distance_type?: string
+          target_user_id: string
         }
         Returns: {
-          avatar_url: string | null
-          display_name: string
-          elapsed_ms: number
-          make: string | null
-          model: string | null
+          make: string
+          model: string
           rank: number
-          recorded_at: string
-          top_speed: number
-          user_id: string
-          year: number | null
+          sub_value: number
+          value: number
+          year: number
         }[]
       }
       get_nearby_hazards: {
@@ -938,24 +1155,144 @@ export type Database = {
           user_id: string
         }[]
       }
-      get_top_speed_leaderboard: {
+      get_nearby_roads:
+        | {
+            Args: { p_lat: number; p_lon: number; p_radius?: number }
+            Returns: {
+              description: string
+              distance_meters: number
+              id: string
+              is_public: boolean
+              length_meters: number
+              name: string
+              route_wkt: string
+              user_id: string
+            }[]
+          }
+        | {
+            Args: {
+              p_lat: number
+              p_lon: number
+              p_radius?: number
+              p_tag?: string
+            }
+            Returns: {
+              best_avg_speed_kmh: number
+              curviness_score: number
+              description: string
+              distance_meters: number
+              elevation_gain_m: number
+              id: string
+              is_public: boolean
+              length_meters: number
+              name: string
+              route_wkt: string
+              saved_count: number
+              surface_type: string
+              tags: string[]
+              user_id: string
+            }[]
+          }
+      get_nearby_tracks: {
+        Args: { p_lat: number; p_lon: number; p_radius?: number }
+        Returns: {
+          best_lap_ms: number
+          creator_id: string
+          distance_meters: number
+          id: string
+          is_public: boolean
+          lap_count: number
+          length_meters: number
+          location_name: string
+          name: string
+          outline_points: Json
+          sector_points: Json
+          start_finish_heading: number
+          start_finish_point: Json
+        }[]
+      }
+      get_nearby_tracks_legacy: {
+        Args: { p_lat: number; p_lon: number; p_radius?: number }
+        Returns: {
+          creator_id: string
+          distance_meters: number
+          id: string
+          is_public: boolean
+          location_name: string
+          name: string
+          sector_points: Json
+          start_finish_heading: number
+          start_finish_point: Json
+        }[]
+      }
+      get_sprint_leaderboard: {
         Args: {
           filter_make?: string | null
           filter_model?: string | null
           limit_count?: number
           scope_type?: string
+          sprint_type?: string
         }
         Returns: {
-          avatar_url: string | null
           display_name: string
-          make: string | null
-          model: string | null
+          elapsed_ms: number
           rank: number
           recorded_at: string
           top_speed: number
           user_id: string
-          year: number | null
+          vehicle_make: string
+          vehicle_model: string
+          vehicle_year: number
         }[]
+      }
+      get_top_speed_leaderboard:
+        | {
+            Args: {
+              filter_make?: string
+              filter_model?: string
+              limit_count?: number
+              scope_type?: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              make: string
+              model: string
+              rank: number
+              recorded_at: string
+              top_speed: number
+              user_id: string
+              year: number
+            }[]
+          }
+        | {
+            Args: {
+              filter_make?: string | null
+              filter_model?: string | null
+              limit_count: number
+              offset_count: number
+              period_type: string
+              scope_type: string
+            }
+            Returns: {
+              avatar_url: string
+              display_name: string
+              make: string
+              model: string
+              rank: number
+              recorded_at: string
+              top_speed: number
+              user_id: string
+              year: number
+            }[]
+          }
+      get_track_personal_bests: {
+        Args: { p_track_id: string; p_user_id?: string }
+        Returns: Json
+      }
+      get_vehicle_maintenance_summary: {
+        Args: { p_vehicle_id: string }
+        Returns: Json
       }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
@@ -999,9 +1336,14 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      purge_old_speed_samples: {
+        Args: { p_days_old?: number }
+        Returns: number
+      }
       report_hazard: {
         Args: { hazard_type: string; lat: number; lon: number }
         Returns: {
+          client_id: string | null
           confirmations: number
           expires_at: string
           id: string
@@ -1016,6 +1358,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      sanitize_shared_route: {
+        Args: { p_route: unknown; p_trim_meters?: number }
+        Returns: unknown
       }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
@@ -1598,6 +1944,10 @@ export type Database = {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
       }
+      toggle_saved_road_bookmark: {
+        Args: { p_road_id: string }
+        Returns: number
+      }
       unlockrows: { Args: { "": string }; Returns: number }
       updategeometrysrid: {
         Args: {
@@ -1611,7 +1961,12 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      payment_status:
+        | "pending"
+        | "processing"
+        | "succeeded"
+        | "failed"
+        | "refunded"
     }
     CompositeTypes: {
       geometry_dump: {
@@ -1746,7 +2101,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      payment_status: [
+        "pending",
+        "processing",
+        "succeeded",
+        "failed",
+        "refunded",
+      ],
+    },
   },
 } as const
 
@@ -1774,4 +2137,6 @@ export type LapRow = Database['public']['Tables']['laps']['Row'];
 export type LapRowInsert = Database['public']['Tables']['laps']['Insert'];
 export type SavedRoadRow = Database['public']['Tables']['saved_roads']['Row'];
 export type SavedRoadRowInsert = Database['public']['Tables']['saved_roads']['Insert'];
-
+export type Payment = Database['public']['Tables']['payments']['Row'];
+export type PaymentInsert = Database['public']['Tables']['payments']['Insert'];
+export type PaymentLedger = Database['public']['Tables']['payment_ledger']['Row'];

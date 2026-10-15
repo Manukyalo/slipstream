@@ -12,8 +12,15 @@ interface PageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
 }
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://zzfjvhbuhsugwztllxco.supabase.co';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Zmp2aGJ1aHN1Z3d6dGxseGNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTYwOTIsImV4cCI6MjEwNTkzMjA5Mn0.BJ5UtkpSabu4plR4CtHYlKKZkBxWOHzm8AnhJ3fRN5Q';
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  'https://zzfjvhbuhsugwztllxco.supabase.co';
+// Must be injected via environment — never hardcoded. Graceful degradation: page renders with generic title if missing.
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+  '';
 const APP_BASE_URL = (
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.EXPO_PUBLIC_APP_URL ||
@@ -22,7 +29,7 @@ const APP_BASE_URL = (
 
 async function getInviter(code: string): Promise<string | null> {
   const clean = code.trim().toUpperCase();
-  if (!clean) return null;
+  if (!clean || !SUPABASE_ANON_KEY) return null;
 
   try {
     const url = `${SUPABASE_URL}/rest/v1/profiles?referral_code=eq.${encodeURIComponent(clean)}&select=display_name`;

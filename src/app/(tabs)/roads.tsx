@@ -1,802 +1,477 @@
+/**
+ * RoadsScreen — Slipstream Favorite & Community Roads Explorer
+ *
+ * Phase 4 Architecture:
+ *  - Large title "Roads" collapsing on scroll inside ScreenContainer
+ *  - Segmented control: Nearby and Mine
+ *  - Search input with clear button
+ *  - Filter chips: Twisty, Scenic, Off-road, Tarmac, Distance (sort)
+ *  - Radius selector for Nearby query: 25 km, 50 km, 100 km, 250 km
+ *  - RoadCard with SVG route thumbnail, telemetry metrics, and bookmarking
+ *  - Two distinct empty states (Nearby vs Mine) that never cross-display
+ *  - Skeleton cards during load, ErrorState with toUserMessage() on failure
+ *  - Reporting modal & Share recap integration
+ */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
-  FlatList,
-  Pressable,
   TextInput,
+  TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Alert,
-  Modal,
-  Linking,
-  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  ArrowRight,
-  Globe,
-  Lock,
-  MapPin,
-  Navigation,
-  Route,
-  Satellite,
-  Trash2,
-  X,
-} from 'lucide-react-native';
-import { Theme } from '@/constants/theme';
-import { Colors, FontFamily, FontSize, Spacing, Radius } from '@/constants/design';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { Segmented } from '@/components/ui/Segmented';
+import { FilterChip } from '@/components/ui/FilterChip';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
+import { Icon } from '@/components/ui/Icon';
+import { Text } from '@/components/ui/Text';
+import { RoadCard } from '@/components/roads/RoadCard';
+import { RoadCardSkeleton } from '@/components/roads/RoadCardSkeleton';
+import { RoadReportModal } from '@/components/roads/RoadReportModal';
+import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
 import { useTracking } from '@/contexts/TrackingContext';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   fetchNearbyRoads,
   fetchMyRoads,
   deleteRoad,
-  toggleRoadVisibility,
-  formatRoadLength,
-  formatProximity,
   type SavedRoad,
 } from '@/services/savedRoads';
+import { type GenerateRecapCardParams } from '@/services/shareCard';
+import { toUserMessage } from '@/utils/toUserMessage';
 
-type RoadsTab = 'nearby' | 'my_roads';
+type FilterTag = 'all' | 'twisty' | 'scenic' | 'off_road' | 'tarmac' | 'distance';
+const RADIUS_OPTIONS = [25, 50, 100, 250] as const;
 
 export default function RoadsScreen() {
   const router = useRouter();
   const { currentCoords } = useTracking();
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<RoadsTab>('nearby');
+  const [tabIndex, setTabIndex] = useState<number>(0); // 0 = Nearby, 1 = Mine
+  const [selectedRadiusKm, setSelectedRadiusKm] = useState<number>(100);
+  const [activeFilter, setActiveFilter] = useState<FilterTag>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   const [nearbyRoads, setNearbyRoads] = useState<SavedRoad[]>([]);
   const [myRoads, setMyRoads] = useState<SavedRoad[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedRoad, setSelectedRoad] = useState<SavedRoad | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [reportingRoad, setReportingRoad] = useState<SavedRoad | null>(null);
+  const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
   const currentLon = currentCoords?.[0] ?? null;
   const currentLat = currentCoords?.[1] ?? null;
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  const loadData = useCallback(async () => {
+    try {
+      if (tabIndex === 0) {
+        // Nearby Tab
+        if (currentLon !== null && currentLat !== null) {
+          const radiusMeters = selectedRadiusKm * 1000;
+          const tag = activeFilter !== 'distance' && activeFilter !== 'all' ? activeFilter : undefined;
+          const roads = await fetchNearbyRoads(currentLon, currentLat, radiusMeters, tag);
+          setNearbyRoads(roads);
+          setErrorMsg(null);
+        } else {
+          setNearbyRoads([]);
+          setErrorMsg(null);
+        }
+      } else {
+        // Mine Tab
+        const roads = await fetchMyRoads();
+        setMyRoads(roads);
+        setErrorMsg(null);
+      }
+    } catch (err) {
+      const msg = toUserMessage(err);
+      setErrorMsg(msg);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [tabIndex, currentLon, currentLat, selectedRadiusKm, activeFilter]);
 
   useEffect(() => {
-    let cancelled = false;
+    let isCancelled = false;
+
     const run = async () => {
-      setLoading(true);
-      try {
-        if (activeTab === 'nearby') {
-          if (currentLon !== null && currentLat !== null) {
-            const roads = await fetchNearbyRoads(currentLon, currentLat);
-            if (!cancelled) setNearbyRoads(roads);
-          } else {
-            if (!cancelled) setNearbyRoads([]);
-          }
-        } else {
-          const roads = await fetchMyRoads();
-          if (!cancelled) setMyRoads(roads);
-        }
-      } catch (err) {
-        console.warn('[roads] Error loading roads:', err);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setRefreshing(false);
-        }
+      await Promise.resolve();
+      if (!isCancelled) {
+        await loadData();
       }
     };
-    run();
-    return () => { cancelled = true; };
-  }, [activeTab, currentLon, currentLat, refreshKey]);
 
-  const loadData = useCallback(() => { setRefreshKey((k) => k + 1); }, []);
+    void run();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [loadData]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setRefreshKey((k) => k + 1);
-  }, []);
+    void loadData();
+  }, [loadData]);
 
   const handleDeleteRoad = async (road: SavedRoad) => {
-    Alert.alert(
-      'Delete Road',
-      `Are you sure you want to delete "${road.name}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteRoad(road.id);
-              setMyRoads((prev) => prev.filter((r) => r.id !== road.id));
-              setNearbyRoads((prev) => prev.filter((r) => r.id !== road.id));
-              if (selectedRoad?.id === road.id) setSelectedRoad(null);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : 'Unknown error';
-              Alert.alert('Delete Failed', msg);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleToggleVisibility = async (road: SavedRoad) => {
-    const nextPublic = !road.isPublic;
     try {
-      await toggleRoadVisibility(road.id, nextPublic);
-      setMyRoads((prev) =>
-        prev.map((r) => (r.id === road.id ? { ...r, isPublic: nextPublic } : r)),
-      );
-      if (selectedRoad?.id === road.id) {
-        setSelectedRoad({ ...selectedRoad, isPublic: nextPublic });
-      }
+      await deleteRoad(road.id);
+      setMyRoads((prev) => prev.filter((r) => r.id !== road.id));
+      setNearbyRoads((prev) => prev.filter((r) => r.id !== road.id));
+      Alert.alert('Road Deleted', `"${road.name}" has been removed.`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      Alert.alert('Update Failed', msg);
+      const msg = toUserMessage(err);
+      Alert.alert('Delete Failed', msg);
     }
   };
 
-  const activeList = activeTab === 'nearby' ? nearbyRoads : myRoads;
-
-  const filteredRoads = useMemo(() => {
-    if (!searchQuery.trim()) return activeList;
-    const q = searchQuery.toLowerCase();
-    return activeList.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        (r.description && r.description.toLowerCase().includes(q)),
-    );
-  }, [activeList, searchQuery]);
-
-  const openNavigation = (road: SavedRoad) => {
-    if (!road.routeWkt) {
-      Alert.alert('No Route Data', 'Unable to parse route coordinates.');
-      return;
-    }
-    // Extract first coordinate from WKT LINESTRING(lon lat, ...)
-    const match = road.routeWkt.match(/LINESTRING\s*\(\s*([-\d.]+)\s+([-\d.]+)/i);
-    if (match) {
-      const lon = match[1];
-      const lat = match[2];
-      const url =
-        Platform.OS === 'ios'
-          ? `maps://?daddr=${lat},${lon}&dirflg=d`
-          : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
-      Linking.openURL(url).catch(() => {
-        Alert.alert('Maps Unavailable', 'Could not open external maps application.');
-      });
-    } else {
-      Alert.alert('Route Details', `Head to ${road.name} to start your drive.`);
-    }
+  const handleShareRoad = (road: SavedRoad) => {
+    setShareParams({
+      type: 'trip',
+      headline: road.name.toUpperCase(),
+      distanceMeters: road.lengthMeters,
+      topSpeedKmh: road.bestAvgSpeedKmh ? road.bestAvgSpeedKmh * 1.3 : 110,
+      durationSeconds: Math.round((road.lengthMeters / ((road.bestAvgSpeedKmh || 60) * (1000 / 3600)))),
+    });
   };
+
+  // Filter & Search computation
+  const activeRoadsList = tabIndex === 0 ? nearbyRoads : myRoads;
+
+  const displayedRoads = useMemo(() => {
+    let result = [...activeRoadsList];
+
+    // Search query filter
+    if (searchQuery.trim().length > 0) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          (r.description && r.description.toLowerCase().includes(q)) ||
+          (r.surfaceType && r.surfaceType.toLowerCase().includes(q)),
+      );
+    }
+
+    // Tag filter
+    if (activeFilter === 'twisty') {
+      result = result.filter((r) => (r.curvinessScore ?? 0) >= 7.5 || r.tags?.includes('twisty'));
+    } else if (activeFilter === 'scenic') {
+      result = result.filter((r) => r.tags?.includes('scenic'));
+    } else if (activeFilter === 'off_road') {
+      result = result.filter((r) => r.surfaceType === 'off_road' || r.tags?.includes('off_road'));
+    } else if (activeFilter === 'tarmac') {
+      result = result.filter((r) => r.surfaceType === 'tarmac' || !r.surfaceType);
+    } else if (activeFilter === 'distance') {
+      // Sort by length descending
+      result.sort((a, b) => b.lengthMeters - a.lengthMeters);
+    }
+
+    return result;
+  }, [activeRoadsList, searchQuery, activeFilter]);
 
   return (
-    <View style={styles.root}>
-      {/* Screen Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Favorite Roads</Text>
-        <Text style={styles.headerSub}>
-          Curated scenic & twisty drives discovered by drivers
-        </Text>
-
-        {/* Tab switch */}
-        <View style={styles.tabBar}>
-          <Pressable
-            style={[styles.tabItem, activeTab === 'nearby' && styles.tabItemActive]}
-            onPress={() => setActiveTab('nearby')}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'nearby' && styles.tabTextActive,
-              ]}
-            >
-              NEARBY ROADS
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabItem, activeTab === 'my_roads' && styles.tabItemActive]}
-            onPress={() => setActiveTab('my_roads')}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'my_roads' && styles.tabTextActive,
-              ]}
-            >
-              MY ROADS
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Search filter */}
-        <View style={styles.searchWrap}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by road name or tags…"
-            placeholderTextColor={Colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
+    <ScreenContainer
+      scrollable
+      title="Roads"
+      largeTitle
+      scrollViewProps={{
+        refreshControl: (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.accent.cyan}
+          />
+        ),
+      }}
+    >
+      <View style={styles.container}>
+        {/* Segmented Control: Nearby vs Mine */}
+        <View style={styles.segmentedWrapper}>
+          <Segmented
+            options={['Nearby', 'Mine']}
+            selected={tabIndex}
+            onChange={(idx) => {
+              setLoading(true);
+              setTabIndex(idx);
+            }}
           />
         </View>
-      </View>
 
-      {/* Content */}
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={Colors.accentCyan} />
-          <Text style={styles.loadingText}>Finding best driving routes…</Text>
+        {/* Search input with Phosphor search icon */}
+        <View style={styles.searchContainer}>
+          <Icon name="search" size={18} color={Colors.text.tertiary} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search roads, passes, canyons..."
+            placeholderTextColor={Colors.text.tertiary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearBtn}
+              hitSlop={8}
+            >
+              <Icon name="close" size={14} color={Colors.text.secondary} />
+            </TouchableOpacity>
+          )}
         </View>
-      ) : activeTab === 'nearby' && (currentLon === null || currentLat === null) ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.stateIconWrap}>
-            <Satellite size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
-          </View>
-          <Text style={styles.emptyTitle}>Acquiring GPS fix</Text>
-          <Text style={styles.emptySub}>
-            Location access is needed to show scenic roads near your position.
-          </Text>
-          <Pressable
-            style={({ pressed }) => [styles.ctaBtn, pressed && styles.pressed]}
-            onPress={loadData}
-          >
-            <Text style={styles.ctaBtnText}>Retry Location</Text>
-          </Pressable>
+
+        {/* Horizontal Filter Chips */}
+        <View style={styles.filtersScroll}>
+          <FilterChip
+            label="All"
+            active={activeFilter === 'all'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter('all');
+            }}
+          />
+          <FilterChip
+            label="Twisty"
+            active={activeFilter === 'twisty'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter(activeFilter === 'twisty' ? 'all' : 'twisty');
+            }}
+          />
+          <FilterChip
+            label="Scenic"
+            active={activeFilter === 'scenic'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter(activeFilter === 'scenic' ? 'all' : 'scenic');
+            }}
+          />
+          <FilterChip
+            label="Tarmac"
+            active={activeFilter === 'tarmac'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter(activeFilter === 'tarmac' ? 'all' : 'tarmac');
+            }}
+          />
+          <FilterChip
+            label="Off-road"
+            active={activeFilter === 'off_road'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter(activeFilter === 'off_road' ? 'all' : 'off_road');
+            }}
+          />
+          <FilterChip
+            label="Distance"
+            active={activeFilter === 'distance'}
+            onPress={() => {
+              setLoading(true);
+              setActiveFilter(activeFilter === 'distance' ? 'all' : 'distance');
+            }}
+          />
         </View>
-      ) : filteredRoads.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <View style={styles.stateIconWrap}>
-            <Route size={28} strokeWidth={1.5} color={Theme.colors.textMuted} />
-          </View>
-          <Text style={styles.emptyTitle}>
-            {searchQuery ? 'No matching roads found' : 'No saved roads yet'}
-          </Text>
-          <Text style={styles.emptySub}>
-            {activeTab === 'nearby'
-              ? 'No public roads recorded in this 100 km radius yet. Be the first to map a great route!'
-              : 'Complete a drive in the Track tab and tap "Save Road" to add your favorite twisty routes.'}
-          </Text>
-          <Pressable
-            style={({ pressed }) => [styles.ctaBtn, pressed && styles.pressed]}
-            onPress={() => router.push('/(tabs)/track')}
-          >
-            <Text style={styles.ctaBtnText}>Start a Drive</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredRoads}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const isOwner = user?.id === item.userId;
-            return (
-              <Pressable
-                style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-                onPress={() => setSelectedRoad(item)}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardHeaderLeft}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {item.name}
+
+        {/* Nearby Radius Selector (25, 50, 100, 250 km) */}
+        {tabIndex === 0 && (
+          <View style={styles.radiusRow}>
+            <View style={styles.radiusLabelWrap}>
+              <Icon name="map-pin" size={13} color={Colors.accent.cyan} weight="duotone" />
+              <Text style={styles.radiusLabel}>RADIUS</Text>
+            </View>
+            <View style={styles.radiusOptions}>
+              {RADIUS_OPTIONS.map((km) => {
+                const active = selectedRadiusKm === km;
+                return (
+                  <TouchableOpacity
+                    key={km}
+                    style={[styles.radiusChip, active ? styles.radiusChipActive : undefined]}
+                    onPress={() => {
+                      setLoading(true);
+                      setSelectedRadiusKm(km);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.radiusText, active ? styles.radiusTextActive : undefined]}>
+                      {km} km
                     </Text>
-                    {item.distanceMeters !== undefined && (
-                      <View style={styles.proximityRow}>
-                        <MapPin size={10} strokeWidth={1.5} color={Colors.accentCyan} />
-                        <Text style={styles.cardProximity}>
-                          {formatProximity(item.distanceMeters)}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.badgeRow}>
-                    <View style={styles.lengthBadge}>
-                      <Text style={styles.lengthBadgeText}>
-                        {formatRoadLength(item.lengthMeters)}
-                      </Text>
-                    </View>
-                    {isOwner && (
-                      <View
-                        style={[
-                          styles.visibilityBadge,
-                          item.isPublic
-                            ? styles.badgePublic
-                            : styles.badgePrivate,
-                        ]}
-                      >
-                        <Text style={styles.visibilityText}>
-                          {item.isPublic ? 'public' : 'private'}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                {item.description ? (
-                  <Text style={styles.cardDesc} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                ) : null}
-
-                <View style={styles.cardFooter}>
-                  <View style={styles.cardActionRow}>
-                    <Text style={styles.cardAction}>View details</Text>
-                    <ArrowRight size={12} strokeWidth={1.5} color={Colors.accentCyan} />
-                  </View>
-                  {isOwner && (
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleDeleteRoad(item);
-                      }}
-                      hitSlop={8}
-                    >
-                      <Text style={styles.deleteLink}>Delete</Text>
-                    </Pressable>
-                  )}
-                </View>
-              </Pressable>
-            );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.accentCyan}
-            />
-          }
-          showsVerticalScrollIndicator={false}
-        />
-      )}
-
-      {/* Road Details Modal */}
-      {selectedRoad && (
-        <Modal
-          visible={!!selectedRoad}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setSelectedRoad(null)}
-        >
-          <View style={styles.modalBackdrop}>
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalTitle} numberOfLines={2}>
-                    {selectedRoad.name}
-                  </Text>
-                  <Text style={styles.modalSub}>
-                    {formatRoadLength(selectedRoad.lengthMeters)}
-                    {selectedRoad.distanceMeters !== undefined
-                      ? ` · ${formatProximity(selectedRoad.distanceMeters)}`
-                      : ''}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => setSelectedRoad(null)}
-                  style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
-                  accessibilityLabel="Close"
-                >
-                  <X size={14} strokeWidth={2} color={Theme.colors.textMuted} />
-                </Pressable>
-              </View>
-
-              {selectedRoad.description ? (
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionLabel}>DESCRIPTION & NOTES</Text>
-                  <Text style={styles.modalSectionText}>
-                    {selectedRoad.description}
-                  </Text>
-                </View>
-              ) : null}
-
-              {user?.id === selectedRoad.userId && (
-                <View style={styles.ownerControls}>
-                  <Text style={styles.modalSectionLabel}>Manage road</Text>
-                  <View style={styles.ownerActions}>
-                    <Pressable
-                      style={({ pressed }) => [styles.ownerBtn, pressed && styles.pressed]}
-                      onPress={() => handleToggleVisibility(selectedRoad)}
-                    >
-                      {selectedRoad.isPublic
-                        ? <Lock size={13} strokeWidth={1.5} color={Theme.colors.textPrimary} />
-                        : <Globe size={13} strokeWidth={1.5} color={Theme.colors.signalCyan} />}
-                      <Text style={styles.ownerBtnText}>
-                        {selectedRoad.isPublic ? 'Make private' : 'Make public'}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.ownerBtn,
-                        styles.deleteBtn,
-                        pressed && styles.pressed,
-                      ]}
-                      onPress={() => handleDeleteRoad(selectedRoad)}
-                    >
-                      <Trash2 size={13} strokeWidth={1.5} color={Colors.accentRed} />
-                      <Text style={[styles.ownerBtnText, styles.deleteBtnText]}>
-                        Delete
-                      </Text>
-                    </Pressable>
-                  </View>
-                </View>
-              )}
-
-              {/* Action Buttons */}
-              <View style={styles.modalActions}>
-                <Pressable
-                  style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
-                  onPress={() => openNavigation(selectedRoad)}
-                >
-                  <Navigation size={14} strokeWidth={1.5} color={Colors.accentCyan} />
-                  <Text style={styles.navBtnText}>Navigate to start</Text>
-                </Pressable>
-
-                <Pressable
-                  style={({ pressed }) => [styles.driveBtn, pressed && styles.pressed]}
-                  onPress={() => {
-                    setSelectedRoad(null);
-                    router.push('/(tabs)/track');
-                  }}
-                >
-                  <Text style={styles.driveBtnText}>Drive route</Text>
-                </Pressable>
-              </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
-        </Modal>
-      )}
-    </View>
+        )}
+
+        {/* Content State: Loading */}
+        {loading && !refreshing ? (
+          <View style={styles.listContainer}>
+            <RoadCardSkeleton />
+            <RoadCardSkeleton />
+            <RoadCardSkeleton />
+          </View>
+        ) : errorMsg ? (
+          /* Content State: Error with Retry */
+          <ErrorState message={errorMsg} onRetry={loadData} style={styles.stateContainer} />
+        ) : displayedRoads.length === 0 ? (
+          /* Content State: Two Distinct Empty States */
+          tabIndex === 0 ? (
+            /* Nearby Empty State */
+            <EmptyState
+              icon="path"
+              iconColor="cyan"
+              title="No roads nearby"
+              description={`Nobody has mapped a road within ${selectedRadiusKm} km yet.`}
+              action={{
+                label: 'Record the first one',
+                onPress: () => router.push('/(tabs)/track'),
+              }}
+              style={styles.stateContainer}
+            />
+          ) : (
+            /* Mine Empty State */
+            <EmptyState
+              icon="bookmark"
+              iconColor="blue"
+              title="No saved roads"
+              description="You have not saved any roads."
+              action={{
+                label: 'Browse nearby',
+                onPress: () => setTabIndex(0),
+              }}
+              style={styles.stateContainer}
+            />
+          )
+        ) : (
+          /* Content State: Roads List */
+          <View style={styles.listContainer}>
+            {displayedRoads.map((road) => (
+              <RoadCard
+                key={road.id}
+                road={road}
+                isOwner={road.userId === user?.id}
+                onShare={handleShareRoad}
+                onReport={(r) => setReportingRoad(r)}
+                onDelete={handleDeleteRoad}
+              />
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* Report Modal */}
+      <RoadReportModal
+        visible={!!reportingRoad}
+        road={reportingRoad}
+        onClose={() => setReportingRoad(null)}
+      />
+
+      {/* Share Modal */}
+      <ShareRecapModal
+        visible={!!shareParams}
+        params={shareParams}
+        onClose={() => setShareParams(null)}
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: Colors.bgBase,
+  container: {
+    paddingHorizontal: Spacing.screen,
+    paddingBottom: Spacing.section,
+    gap: Spacing[4],
   },
-  header: {
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
-    paddingHorizontal: Spacing.base,
-    paddingBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+  segmentedWrapper: {
+    marginBottom: Spacing[2],
   },
-  headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h1,
-    color: Colors.textPrimary,
-  },
-  headerSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-    marginTop: 2,
-    marginBottom: Spacing.md,
-  },
-  tabBar: {
+  searchContainer: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.md,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: Radius.sm,
+    backgroundColor: Colors.surface[1],
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    paddingHorizontal: Spacing[3],
+    height: 44,
   },
-  tabItemActive: {
-    backgroundColor: Colors.bgElevated,
-  },
-  tabText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.caption,
-    color: Colors.textMuted,
-    letterSpacing: 0.5,
-  },
-  tabTextActive: {
-    color: Colors.accentCyan,
-  },
-  searchWrap: {
-    marginTop: Spacing.md,
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
-    backgroundColor: Colors.bgSurface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
-    color: Colors.textPrimary,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-  },
-  // Empty / loading states
-  stateIconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: Theme.radius.full,
-    backgroundColor: Theme.colors.surfaceRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Theme.spacing.md,
-  },
-  loadingText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.body,
-    color: Colors.textSecondary,
-    marginTop: Spacing.md,
-  },
-  emptyTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: Spacing.xs,
-  },
-  emptySub: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    color: Colors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: Spacing.lg,
-  },
-  ctaBtn: {
-    backgroundColor: Colors.accentCyan,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
-  },
-  ctaBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textInverse,
-  },
-  // List
-  centerContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xl,
-  },
-  listContent: {
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.sm,
-    paddingBottom: 100,
-  },
-  // Cards -> flat hairline rows
-  card: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.colors.hairline,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 6,
-  },
-  cardHeaderLeft: {
-    flex: 1,
-  },
-  cardTitle: {
-    fontFamily: Theme.fonts.bodySemiBold,
+    fontFamily: FontFamily.body,
     fontSize: 14,
-    color: Theme.colors.textPrimary,
+    color: Colors.text.primary,
+    height: '100%',
   },
-  proximityRow: {
+  clearBtn: {
+    padding: 4,
+  },
+  filtersScroll: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  radiusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface[1],
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
-  cardProximity: {
-    fontFamily: Theme.fonts.bodyMedium,
-    fontSize: 11,
-    color: Theme.colors.signalCyan,
-  },
-  badgeRow: {
+  radiusLabelWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  lengthBadge: {
-    backgroundColor: Colors.bgElevated,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  lengthBadgeText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 10,
-    color: Colors.textPrimary,
-  },
-  visibilityBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-  },
-  badgePublic: {
-    backgroundColor: 'rgba(0, 212, 255, 0.15)',
-  },
-  badgePrivate: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  visibilityText: {
-    fontFamily: Theme.fonts.bodyMedium,
+  radiusLabel: {
+    fontFamily: FontFamily.overline,
     fontSize: 9,
-    color: Colors.textSecondary,
-    letterSpacing: 0.4,
-  },
-  cardDesc: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
-    marginTop: Spacing.sm,
-    lineHeight: 18,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.sm,
-  },
-  cardActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardAction: {
-    fontFamily: Theme.fonts.bodyMedium,
-    fontSize: 12,
-    color: Theme.colors.signalCyan,
-  },
-  deleteLink: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentRed,
-  },
-  separator: {
-    height: 0, // separator replaced by card borderBottomWidth hairline
-  },
-  pressed: {
-    opacity: 0.75,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: Colors.bgSurface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: Spacing.md,
-  },
-  modalTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
-  },
-  modalSub: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
-    marginTop: 4,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.bgElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
-  modalSection: {
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  modalSectionLabel: {
-    fontFamily: Theme.fonts.bodyMedium,
-    fontSize: 11,
-    color: Theme.colors.textMuted,
-    textTransform: 'uppercase',
+    color: Colors.text.tertiary,
     letterSpacing: 0.8,
-    marginBottom: 4,
   },
-  modalSectionText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    color: Colors.textSecondary,
-    lineHeight: 20,
-  },
-  ownerControls: {
-    marginVertical: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  ownerActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginTop: Spacing.xs,
-  },
-  ownerBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: Radius.sm,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.bgBase,
+  radiusOptions: {
     flexDirection: 'row',
     gap: 6,
   },
-  ownerBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textPrimary,
-  },
-  deleteBtn: {
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-  },
-  deleteBtnText: {
-    color: Colors.accentRed,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    marginTop: Spacing.lg,
-    paddingBottom: Platform.OS === 'ios' ? Spacing.lg : Spacing.sm,
-  },
-  navBtn: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
+  radiusChip: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface[2],
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
+    borderColor: Colors.hairline,
   },
-  navBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.accentCyan,
+  radiusChipActive: {
+    borderColor: Colors.accent.cyan,
+    backgroundColor: Colors.tint.cyan,
   },
-  driveBtn: {
-    flex: 1,
-    backgroundColor: Colors.accentCyan,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+  radiusText: {
+    fontFamily: FontFamily.heading,
+    fontSize: 10,
+    color: Colors.text.secondary,
+    fontVariant: ['tabular-nums'],
   },
-  driveBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textInverse,
+  radiusTextActive: {
+    color: Colors.accent.cyan,
+  },
+  listContainer: {
+    marginTop: Spacing[2],
+  },
+  stateContainer: {
+    marginTop: Spacing.section,
   },
 });

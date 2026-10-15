@@ -87,7 +87,7 @@ export function useHazardAlerts({
             const cfg = HAZARD_CONFIG[closest.type];
             Notifications.scheduleNotificationAsync({
               content: {
-                title: `⚠️ ${cfg.label} Ahead`,
+                title: `${cfg.label} Ahead`,
                 body: `${Math.round(closest.distance_meters)}m away · ${closest.confirmations} driver confirmations`,
                 sound: true,
               },

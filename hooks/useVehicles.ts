@@ -7,6 +7,8 @@ import {
   fetchUserVehicles,
   setPrimaryVehicle as setPrimaryService,
   uploadVehiclePhoto as uploadPhotoService,
+  updateVehicleOdometer,
+  attachDrivesToVehicle,
   type CreateVehicleInput,
 } from '@/services/vehicles';
 import type { Vehicle } from '@/types/database';
@@ -21,6 +23,8 @@ export interface UseVehiclesResult {
   setPrimary: (vehicleId: string) => Promise<void>;
   removeVehicle: (vehicleId: string) => Promise<void>;
   uploadPhoto: (vehicleId: string, localUri: string) => Promise<string>;
+  updateOdometer: (vehicleId: string, odometerKm: number) => Promise<void>;
+  attachDrives: (vehicleId: string, tripIds?: string[]) => Promise<number>;
 }
 
 export function useVehicles(): UseVehiclesResult {
@@ -128,6 +132,24 @@ export function useVehicles(): UseVehiclesResult {
     [user, loadVehicles],
   );
 
+  const updateOdometer = useCallback(
+    async (vehicleId: string, odometerKm: number): Promise<void> => {
+      if (!user) return;
+      await updateVehicleOdometer(user.id, vehicleId, odometerKm);
+      await loadVehicles();
+    },
+    [user, loadVehicles],
+  );
+
+  const attachDrives = useCallback(
+    async (vehicleId: string, tripIds?: string[]): Promise<number> => {
+      const count = await attachDrivesToVehicle(vehicleId, tripIds);
+      await loadVehicles();
+      return count;
+    },
+    [loadVehicles],
+  );
+
   return {
     vehicles,
     primaryVehicle,
@@ -138,5 +160,7 @@ export function useVehicles(): UseVehiclesResult {
     setPrimary,
     removeVehicle,
     uploadPhoto,
+    updateOdometer,
+    attachDrives,
   };
 }

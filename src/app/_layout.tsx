@@ -1,62 +1,69 @@
+/**
+ * Root layout
+ *
+ * Provider stack (outermost → innermost):
+ *   PersistQueryClientProvider  — TanStack Query with persisted cache
+ *   AuthProvider                — Supabase session
+ *   TrackingProvider            — GPS/sensor context
+ *   ToastProvider               — showToast() available everywhere
+ *   RootNavigation              — auth guard + biometric lock + OTA banner
+ *
+ * Status bar: transparent, light content (set once here — never per-screen).
+ * Fonts: loaded via expo-font config plugin in app.json (baked into binary).
+ *        useFonts() hook is removed; SplashScreen hides after auth resolves.
+ */
+
 import { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import {
-  useFonts,
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_600SemiBold,
-  SpaceGrotesk_700Bold,
-} from '@expo-google-fonts/space-grotesk';
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { PreferencesProvider } from '@/contexts/PreferencesContext';
 import { TrackingProvider } from '@/contexts/TrackingContext';
+import { ToastProvider } from '@/components/ui/Toast';
 import { SplashGate } from '@/components/ui/SplashGate';
+import { GlobalErrorBoundary } from '@/components/error/GlobalErrorBoundary';
 import { BiometricLockScreen } from '@/components/security/BiometricLockScreen';
 import { isBiometricLockEnabled, authenticateWithBiometrics } from '@/services/biometrics';
-import { Colors } from '@/constants/design';
+import { Colors } from '@/constants/theme';
 import { startOfflineSync, stopOfflineSync } from '@/services/offlineQueue';
 import { OfflineSyncBanner } from '@/components/ui/OfflineSyncBanner';
 import { useOtaUpdates } from '@/lib/updates';
 import { OtaUpdateBanner } from '@/components/ui/OtaUpdateBanner';
 import { detectAndSaveLaunchReferral } from '@/services/referrals';
+import { queryClient } from '@/lib/queryClient';
+import { asyncStoragePersister } from '@/lib/queryPersister';
 
-// Prevent native splash screen from autohiding before resources/session ready
+// Prevent native splash from auto-hiding before auth state resolves
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth guard + app-level logic
+// ─────────────────────────────────────────────────────────────────────────────
+
 function RootNavigation() {
-  const { status } = useAuth();
+  const { status, profile } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const { isUpdateReady, applyUpdateNow } = useOtaUpdates();
 
-  const [fontsLoaded, fontError] = useFonts({
-    SpaceGrotesk_400Regular,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_600SemiBold,
-    SpaceGrotesk_700Bold,
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [checkingLock, setCheckingLock] = useState<boolean>(true);
+  const [splashFinished, setSplashFinished] = useState<boolean>(false);
 
+  const isReady = status !== 'loading' && !checkingLock;
+
+  // Hide native splash once auth state is known
+  // Fonts are baked via expo-font plugin in app.json
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    if (isReady) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded, fontError]);
+  }, [isReady]);
 
+  // App-level side effects
   useEffect(() => {
     startOfflineSync();
     detectAndSaveLaunchReferral().catch(() => {});
@@ -65,7 +72,7 @@ function RootNavigation() {
     };
   }, []);
 
-  // Biometric app lock check on app start
+  // Biometric app lock
   useEffect(() => {
     async function checkAppLock() {
       if (status !== 'authenticated') {
@@ -84,7 +91,6 @@ function RootNavigation() {
       setIsLocked(true);
       setCheckingLock(false);
 
-      // Prompt immediately on foreground
       const authenticated = await authenticateWithBiometrics('Unlock Slipstream');
       if (authenticated) {
         setIsLocked(false);
@@ -96,54 +102,75 @@ function RootNavigation() {
     }
   }, [status]);
 
+  // Auth-based routing
   useEffect(() => {
-    if (status === 'loading' || !fontsLoaded) return;
+    if (status === 'loading') return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inOnboarding = segments[0] === 'onboarding';
 
-    // Only push authenticated users out of the login/signup screens
-    // Unauthenticated users can freely use the app; auth is in Settings tab
-    if (status === 'authenticated' && (inAuthGroup || !segments[0])) {
-      router.replace('/(tabs)/track');
+    if (status === 'authenticated') {
+      const hasCompletedOnboarding = Boolean(profile?.display_name);
+
+      if (!hasCompletedOnboarding && profile !== null) {
+        if (!inOnboarding) {
+          router.replace('/onboarding');
+        }
+      } else if (hasCompletedOnboarding && (inAuthGroup || inOnboarding || !segments[0])) {
+        router.replace('/(tabs)/track');
+      }
+    } else if (status === 'unauthenticated' && inOnboarding) {
+      router.replace('/(auth)/login');
     }
-  }, [status, segments, fontsLoaded, router]);
-
-  if (!fontsLoaded || status === 'loading' || checkingLock) {
-    return <SplashGate />;
-  }
-
-  if (isLocked && status === 'authenticated') {
-    return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <BiometricLockScreen onUnlock={() => setIsLocked(false)} />
-      </View>
-    );
-  }
+  }, [status, profile, segments, router]);
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
-      {isUpdateReady && <OtaUpdateBanner onRestart={applyUpdateNow} />}
-      <OfflineSyncBanner />
-      <Slot />
+      {isLocked && status === 'authenticated' ? (
+        <BiometricLockScreen onUnlock={() => setIsLocked(false)} />
+      ) : (
+        <>
+          {isUpdateReady && <OtaUpdateBanner onRestart={applyUpdateNow} />}
+          <OfflineSyncBanner />
+          <Slot />
+        </>
+      )}
+      {!splashFinished && (
+        <SplashGate isReady={isReady} onFinish={() => setSplashFinished(true)} />
+      )}
     </View>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Root export — provider stack
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <TrackingProvider>
-        <RootNavigation />
-      </TrackingProvider>
-    </AuthProvider>
+    <GlobalErrorBoundary>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister: asyncStoragePersister, maxAge: 24 * 60 * 60 * 1000 }}
+      >
+        <AuthProvider>
+          <PreferencesProvider>
+            <TrackingProvider>
+              <ToastProvider>
+                <RootNavigation />
+              </ToastProvider>
+            </TrackingProvider>
+          </PreferencesProvider>
+        </AuthProvider>
+      </PersistQueryClientProvider>
+    </GlobalErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: Colors.bgBase,
+    flex:            1,
+    backgroundColor: Colors.bg.base,
   },
 });

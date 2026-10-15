@@ -158,19 +158,19 @@ export default function InviteRoute() {
 
         <View style={styles.featuresGrid}>
           <View style={styles.featureItem}>
-            <Text style={styles.featureTitle}>⚡ Drag Timer</Text>
+            <Text style={styles.featureTitle}>Drag Timer</Text>
             <Text style={styles.featureDesc}>0-60, 0-100 & 1/4 mile runs with 0.01s GPS precision.</Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.featureTitle}>📡 Radar Hazards</Text>
+            <Text style={styles.featureTitle}>Radar Hazards</Text>
             <Text style={styles.featureDesc}>Live speed camera zones, red-light traps, and highway alerts.</Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.featureTitle}>🏎️ Track Day</Text>
+            <Text style={styles.featureTitle}>Track Day</Text>
             <Text style={styles.featureDesc}>Automatic lap trigger, delta split telemetry, and sector pace.</Text>
           </View>
           <View style={styles.featureItem}>
-            <Text style={styles.featureTitle}>🔧 Garage Logs</Text>
+            <Text style={styles.featureTitle}>Garage Logs</Text>
             <Text style={styles.featureDesc}>Digital maintenance logbook, tire wear, and vehicle service.</Text>
           </View>
         </View>

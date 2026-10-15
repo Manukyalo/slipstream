@@ -1,52 +1,84 @@
-import React, { useState } from 'react';
+/**
+ * ShareRecapModal — Phase 8 Story Card
+ *
+ * Renders a scaled preview of the 1080×1920 StoryCardView offscreen,
+ * captures it via react-native-view-shot, and shares via expo-sharing.
+ * Zero emojis, zero "Pro Marketing Card" internal wording.
+ */
+
+import React, { useRef, useState, useCallback } from 'react';
 import {
   Modal,
   View,
-  Text,
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
+  ScrollView,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Text } from '@/components/ui/Text';
+import { Icon } from '@/components/ui/Icon';
+import { StoryCardView, type StoryCardData } from '@/components/recap/StoryCardView';
 import {
-  generateAndShareRecapCard,
+  captureAndShareStoryCard,
+  buildStoryCardData,
   type GenerateRecapCardParams,
 } from '@/services/shareCard';
 
 interface ShareRecapModalProps {
   visible: boolean;
   params: GenerateRecapCardParams | null;
+  userHandle?: string;
+  country?: string;
+  vehicleName?: string;
+  referralCode?: string;
   onClose: () => void;
 }
 
-export function ShareRecapModal({ visible, params, onClose }: ShareRecapModalProps) {
+export function ShareRecapModal({
+  visible,
+  params,
+  userHandle = 'pilot',
+  country = 'Kenya',
+  vehicleName = 'Slipstream Vehicle',
+  referralCode,
+  onClose,
+}: ShareRecapModalProps) {
+  const cardRef = useRef<View>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  if (!params) return null;
+  const storyData: StoryCardData | null = params
+    ? buildStoryCardData(params, userHandle, vehicleName, country)
+    : null;
 
-  const handleShare = async () => {
+  if (storyData && referralCode) {
+    storyData.referralCode = referralCode;
+  }
+
+  const handleShare = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
 
-    const result = await generateAndShareRecapCard(params);
+    // Short delay so the offscreen view has fully rendered before capture
+    await new Promise<void>((r) => setTimeout(r, 150));
+
+    const result = await captureAndShareStoryCard(cardRef);
     setLoading(false);
 
     if (result.success) {
       onClose();
     } else {
-      setErrorMsg(result.error ?? 'Failed to generate recap card');
-      Alert.alert(
-        'Card Generation Failed',
-        result.error ?? 'Could not generate story card. Please check your connection and retry.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Retry', onPress: handleShare },
-        ],
-      );
+      setErrorMsg(result.error ?? 'Failed to capture telemetry card. Please try again.');
     }
-  };
+  }, [onClose]);
+
+  const handleRetry = useCallback(() => {
+    setErrorMsg(null);
+    handleShare();
+  }, [handleShare]);
+
+  if (!params || !storyData) return null;
 
   const isDrag = params.type === 'drag' || params.type === 'sprint';
   const heroStat = isDrag
@@ -54,65 +86,47 @@ export function ShareRecapModal({ visible, params, onClose }: ShareRecapModalPro
     : `${Math.round(params.topSpeedKmh ?? 0)} km/h`;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.cardContainer}>
+        <View style={styles.sheet}>
           {/* Header */}
-          <View style={styles.modalHeader}>
+          <View style={styles.header}>
             <View>
-              <Text style={styles.modalTitle}>SHARE STORY RECAP</Text>
-              <Text style={styles.modalSubtitle}>1080×1920 Pro Marketing Card</Text>
+              <Text variant="heading" color={Colors.text.primary}>
+                Share Story Card
+              </Text>
+              <Text variant="label" color={Colors.text.tertiary} style={styles.headerSub}>
+                {isDrag ? 'Sprint benchmark' : 'Telemetry run'} · {heroStat}
+              </Text>
             </View>
-            <Pressable onPress={onClose} hitSlop={12}>
-              <Text style={styles.closeBtnText}>✕</Text>
+            <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
+              <Icon name="close" size={22} color={Colors.text.secondary} />
             </Pressable>
           </View>
 
-          {/* Story Card Mockup Preview */}
-          <View style={styles.previewFrame}>
-            <View style={styles.previewInner}>
-              <View style={styles.previewTopBar}>
-                <Text style={styles.previewBrand}>SLIPSTREAM</Text>
-                <Text style={styles.previewBadge}>PRO RUN</Text>
-              </View>
-
-              <Text style={styles.previewHeadline} numberOfLines={1}>
-                {params.headline ?? (isDrag ? 'SPRINT BENCHMARK' : 'HIGH-SPEED RUN')}
-              </Text>
-              <Text style={styles.previewVehicle} numberOfLines={1}>
-                🏎️ {params.vehicleName ?? 'PILOT BENCHMARK'}
-              </Text>
-
-              {/* Center Hero Stat */}
-              <View style={styles.heroBox}>
-                <Text style={styles.heroStatValue}>{heroStat}</Text>
-                <Text style={styles.heroStatLabel}>
-                  {isDrag ? 'ELAPSED BENCHMARK' : 'PEAK RECORDED VELOCITY'}
-                </Text>
-              </View>
-
-              {/* Bottom Card Bar with QR representation */}
-              <View style={styles.previewBottomBar}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.previewInviteText}>JOIN THE CREW</Text>
-                  <Text style={styles.previewSubText}>Scan to compare telemetry</Text>
-                </View>
-                <View style={styles.qrStub}>
-                  <Text style={{ fontSize: 14 }}>📱</Text>
-                </View>
+          {/* Scaled card preview */}
+          <ScrollView
+            horizontal={false}
+            contentContainerStyle={styles.previewScroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Scale transform: full 1080×1920 rendered at display size */}
+            <View style={styles.previewOuter}>
+              <View style={styles.previewTransformBox}>
+                <StoryCardView ref={cardRef} data={storyData} />
               </View>
             </View>
-          </View>
+          </ScrollView>
 
-          {/* Error Message if any */}
+          {/* Error state */}
           {errorMsg && (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
+              <Icon name="warning" size={16} color={Colors.semantic.warning} />
+              <View style={styles.errorTextWrap}>
+                <Text variant="label" color={Colors.text.secondary} style={styles.errorText}>
+                  {errorMsg}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -122,18 +136,25 @@ export function ShareRecapModal({ visible, params, onClose }: ShareRecapModalPro
               style={({ pressed }) => [
                 styles.shareBtn,
                 loading && styles.btnDisabled,
-                pressed && styles.btnPressed,
+                pressed && !loading && styles.btnPressed,
               ]}
-              onPress={handleShare}
+              onPress={errorMsg ? handleRetry : handleShare}
               disabled={loading}
             >
               {loading ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color={Colors.bgBase} size="small" />
-                  <Text style={styles.shareBtnText}>GENERATING SERVER CARD...</Text>
+                  <ActivityIndicator color={Colors.bg.base} size="small" />
+                  <Text variant="label" color={Colors.text.inverse} style={styles.shareBtnText}>
+                    Capturing…
+                  </Text>
                 </View>
               ) : (
-                <Text style={styles.shareBtnText}>SHARE TO INSTAGRAM / WHATSAPP</Text>
+                <View style={styles.loadingRow}>
+                  <Icon name="share" size={18} color={Colors.bg.base} />
+                  <Text variant="label" color={Colors.text.inverse} style={styles.shareBtnText}>
+                    {errorMsg ? 'Retry Share' : 'Share to Instagram / WhatsApp'}
+                  </Text>
+                </View>
               )}
             </Pressable>
 
@@ -142,7 +163,9 @@ export function ShareRecapModal({ visible, params, onClose }: ShareRecapModalPro
               onPress={onClose}
               disabled={loading}
             >
-              <Text style={styles.cancelBtnText}>Dismiss</Text>
+              <Text variant="label" color={Colors.text.tertiary}>
+                Dismiss
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -151,186 +174,100 @@ export function ShareRecapModal({ visible, params, onClose }: ShareRecapModalPro
   );
 }
 
+const CARD_SCALE = 0.29; // Scale factor: 1080 * 0.29 ≈ 313 px display width
+
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(4, 6, 10, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.base,
+    backgroundColor: 'rgba(5, 7, 13, 0.85)',
+    justifyContent: 'flex-end',
   },
-  cardContainer: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.base,
-    maxWidth: 400,
-    width: '100%',
+  sheet: {
+    backgroundColor: Colors.surface['1'],
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: Colors.hairline,
+    padding: Spacing.screen,
+    gap: Spacing.gap,
+    maxHeight: '92%',
   },
-  modalHeader: {
+  header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: Spacing.md,
+    paddingBottom: Spacing.gap,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
   },
-  modalTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    letterSpacing: 1,
-  },
-  modalSubtitle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+  headerSub: {
     marginTop: 2,
   },
-  closeBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textMuted,
-    padding: Spacing.xs,
+  closeBtn: {
+    padding: Spacing[2],
+    marginTop: -4,
   },
-  previewFrame: {
-    width: '100%',
-    aspectRatio: 9 / 14,
-    backgroundColor: '#080B14',
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  previewScroll: {
+    alignItems: 'center',
+    paddingVertical: Spacing[2],
+  },
+  // We render StoryCardView at its natural 1080×1920 and scale the outer wrapper
+  previewOuter: {
+    width: 1080 * CARD_SCALE,
+    height: 1920 * CARD_SCALE,
+    borderRadius: Radius.card * 1.5,
     overflow: 'hidden',
-    marginBottom: Spacing.base,
-    padding: Spacing.md,
-  },
-  previewInner: {
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  previewTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  previewBrand: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.label,
-    color: Colors.accentCyan,
-    letterSpacing: 2,
-  },
-  previewBadge: {
-    fontFamily: FontFamily.bold,
-    fontSize: 9,
-    color: Colors.accentCyan,
-    backgroundColor: 'rgba(0, 212, 255, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    letterSpacing: 1,
-  },
-  previewHeadline: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.textPrimary,
-    marginTop: Spacing.sm,
-    letterSpacing: 0.5,
-  },
-  previewVehicle: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  heroBox: {
-    backgroundColor: Colors.bgElevated,
-    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.md,
-    alignItems: 'center',
+    borderColor: Colors.hairline,
   },
-  heroStatValue: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.display,
-    color: Colors.accentCyan,
-    letterSpacing: 1,
-  },
-  heroStatLabel: {
-    fontFamily: FontFamily.medium,
-    fontSize: 9,
-    color: Colors.textSecondary,
-    letterSpacing: 1,
-    marginTop: 4,
-  },
-  previewBottomBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(24, 30, 46, 0.8)',
-    borderRadius: Radius.sm,
-    padding: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  previewInviteText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.textPrimary,
-    letterSpacing: 0.5,
-  },
-  previewSubText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 8,
-    color: Colors.textSecondary,
-  },
-  qrStub: {
-    width: 32,
-    height: 32,
-    backgroundColor: Colors.bgBase,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: Colors.accentCyan,
-    justifyContent: 'center',
-    alignItems: 'center',
+  previewTransformBox: {
+    width: 1080,
+    height: 1920,
+    transform: [{ scale: CARD_SCALE }],
+    transformOrigin: 'top left',
   },
   errorBox: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: Radius.sm,
-    padding: Spacing.sm,
-    marginBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.gap,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderRadius: Radius.iconChip,
+    padding: Spacing[3],
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  errorTextWrap: {
+    flex: 1,
   },
   errorText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentRed,
+    lineHeight: 18,
   },
   actions: {
-    gap: Spacing.xs,
+    gap: Spacing[2],
+    paddingTop: Spacing[2],
   },
   shareBtn: {
-    backgroundColor: Colors.accentCyan,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
+    backgroundColor: Colors.accent.cyan,
+    paddingVertical: 16,
+    borderRadius: Radius.button,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing[2],
   },
   shareBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.caption,
-    color: Colors.bgBase,
-    letterSpacing: 0.5,
+    ...Typography.label,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   cancelBtn: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
-  },
-  cancelBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
   },
   btnDisabled: {
     opacity: 0.6,

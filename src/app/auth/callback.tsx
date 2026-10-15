@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { Colors, FontFamily, FontSize, Spacing } from '@/constants/design';
+import { Icon } from '@/components/ui/Icon';
+import { toUserMessage } from '@/utils/toUserMessage';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -53,11 +55,10 @@ export default function AuthCallback() {
         }
       } catch (err: unknown) {
         if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : 'Authentication failed';
-        console.error('[AuthCallback] Error:', err);
+        const msg = toUserMessage(err);
         setErrorText(msg);
         setTimeout(() => {
-          router.replace('/(tabs)/settings');
+          router.replace('/(tabs)/profile');
         }, 2500);
       }
     }
@@ -87,7 +88,7 @@ export default function AuthCallback() {
       <Text style={styles.logo}>SLIPSTREAM</Text>
       {errorText ? (
         <View style={styles.card}>
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <Icon name="warning" size={36} color={Colors.accentRed} weight="duotone" />
           <Text style={styles.errorTitle}>Sign-in issue</Text>
           <Text style={styles.errorSub}>{errorText}</Text>
           <Text style={styles.redirectSub}>Returning to profile...</Text>
@@ -140,9 +141,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.caption,
     color: Colors.textMuted,
     textAlign: 'center',
-  },
-  errorIcon: {
-    fontSize: 32,
   },
   errorTitle: {
     fontFamily: FontFamily.bold,

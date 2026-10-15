@@ -7,7 +7,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Colors, FontFamily, FontSize, Radius, Spacing } from '@/constants/design';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/Icon';
 import type { Vehicle } from '@/types/database';
 
 interface VehicleCardProps {
@@ -56,7 +57,7 @@ export function VehicleCard({
             />
           ) : (
             <View style={styles.photoPlaceholder}>
-              <Text style={styles.photoPlaceholderIcon}>🏎️</Text>
+              <Icon name="car" size={24} color={Colors.text.tertiary} />
               <Text style={styles.photoPlaceholderText}>Add Photo</Text>
             </View>
           )}
@@ -105,8 +106,13 @@ export function VehicleCard({
             style={({ pressed }) => [styles.maintenanceBtn, pressed && styles.pressed]}
             onPress={() => onMaintenancePress?.(vehicle.id)}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="View service log"
           >
-            <Text style={styles.maintenanceBtnText}>🔧 Service Log</Text>
+            <View style={styles.btnInnerRow}>
+              <Icon name="wrench" size={12} color={Colors.accent.cyan} />
+              <Text style={styles.maintenanceBtnText}>Service Log</Text>
+            </View>
           </Pressable>
 
           <Pressable
@@ -124,34 +130,29 @@ export function VehicleCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.bgSurface,
-    borderRadius: Radius.lg,
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing.base,
-    marginBottom: Spacing.md,
+    borderColor: Colors.hairline,
+    padding: Spacing[4],
+    marginBottom: Spacing[3],
   },
   cardPrimary: {
-    borderColor: Colors.accentCyan,
-    shadowColor: Colors.accentCyan,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 3,
+    borderColor: Colors.accent.cyan,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.base,
+    gap: Spacing[4],
   },
   photoContainer: {
     width: 72,
     height: 72,
-    borderRadius: Radius.md,
+    borderRadius: Radius.card / 2,
     overflow: 'hidden',
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Colors.surface['2'],
     borderWidth: 1,
-    borderColor: Colors.borderSubtle,
+    borderColor: Colors.hairline,
   },
   photo: {
     width: '100%',
@@ -161,17 +162,15 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: Spacing.xs,
-  },
-  photoPlaceholderIcon: {
-    fontSize: 22,
-    marginBottom: 2,
+    padding: Spacing[2],
+    gap: 4,
   },
   photoPlaceholderText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 9,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.label,
+    fontSize: 10,
+    color: Colors.accent.cyan,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   infoCol: {
     flex: 1,
@@ -183,33 +182,33 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   yearText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.label,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.heading,
+    fontSize: 12,
+    color: Colors.text.secondary,
   },
   primaryBadge: {
-    backgroundColor: Colors.accentCyanDim,
-    paddingHorizontal: Spacing.sm,
+    backgroundColor: Colors.tint.cyan,
+    paddingHorizontal: Spacing[2],
     paddingVertical: 2,
-    borderRadius: Radius.xs,
+    borderRadius: Radius.sm,
     borderWidth: 1,
-    borderColor: Colors.accentCyan,
+    borderColor: Colors.accent.cyan,
   },
   primaryBadgeText: {
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.display,
     fontSize: 9,
-    color: Colors.accentCyan,
+    color: Colors.accent.cyan,
     letterSpacing: 0.5,
   },
   makeModelText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.h2,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.display,
+    fontSize: 18,
+    color: Colors.text.primary,
   },
   nicknameText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    color: Colors.text.secondary,
     fontStyle: 'italic',
     marginTop: 2,
   },
@@ -217,66 +216,77 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Spacing.md,
-    paddingTop: Spacing.sm,
+    marginTop: Spacing[3],
+    paddingTop: Spacing[3],
     borderTopWidth: 1,
-    borderTopColor: Colors.borderSubtle,
+    borderTopColor: Colors.hairline,
   },
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing[2],
   },
   maintenanceBtn: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.xs,
-    backgroundColor: Colors.bgElevated,
+    paddingVertical: Spacing[1],
+    paddingHorizontal: Spacing[3],
+    borderRadius: Radius.sm,
+    backgroundColor: Colors.surface['2'],
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.hairline,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  btnInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   maintenanceBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textSecondary,
+    fontFamily: FontFamily.label,
+    fontSize: 13,
+    color: Colors.text.secondary,
   },
   primaryBtn: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing[1],
+    paddingHorizontal: Spacing[3],
     borderRadius: Radius.sm,
-    backgroundColor: Colors.bgElevated,
+    backgroundColor: Colors.surface['2'],
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.hairline,
+    minHeight: 36,
+    justifyContent: 'center',
   },
   primaryBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.textPrimary,
+    fontFamily: FontFamily.label,
+    fontSize: 13,
+    color: Colors.text.primary,
   },
   activeIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing[2],
   },
   activeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.accentCyan,
+    backgroundColor: Colors.accent.cyan,
   },
   activeText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentCyan,
+    fontFamily: FontFamily.label,
+    fontSize: 12,
+    color: Colors.accent.cyan,
   },
   deleteBtn: {
-    paddingVertical: Spacing.xs,
-    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing[1],
+    paddingHorizontal: Spacing[2],
+    minHeight: 36,
+    justifyContent: 'center',
   },
   deleteBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.caption,
-    color: Colors.accentRed,
+    fontFamily: FontFamily.label,
+    fontSize: 13,
+    color: Colors.semantic.danger,
   },
   pressed: {
     opacity: 0.7,

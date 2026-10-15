@@ -1,22 +1,44 @@
 /**
- * Rankings Service
+ * Rankings Service — Phase 7
  *
- * Thin wrappers around the Supabase RPC calls for the three leaderboards.
- * All result types are explicit; no `any`.
+ * Provides typed access to Top Speed, Drag, and Distance leaderboards,
+ * supporting Period filters (Week/Month/All), pagination, same-car filtering,
+ * and user rank resolution with automatic offline caching.
  */
 
 import { supabase } from '@/lib/supabase';
-import { withCache } from '@/services/cache';
+import {
+  saveLeaderboardToCache,
+  getLeaderboardFromCache,
+  type CachedLeaderboard,
+} from './rankingsCache';
 
 // ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
 export type ScopeType = 'global' | 'same_car';
+export type PeriodType = 'week' | 'month' | 'all';
+export type DragDistanceType = 'quarter_mile' | 'half_mile' | 'mile';
 
 export interface SameCarFilter {
   make: string;
   model: string;
+}
+
+export interface UserRankResult {
+  rank: number;
+  value: number;
+  subValue: number | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+}
+
+export interface LeaderboardResult<T> {
+  data: T[];
+  fromCache: boolean;
+  cachedAt?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,23 +59,26 @@ export interface TopSpeedEntry {
 
 export async function fetchTopSpeedLeaderboard(
   scope: ScopeType,
+  period: PeriodType = 'all',
   sameCarFilter?: SameCarFilter,
   limit = 50,
-): Promise<TopSpeedEntry[]> {
-  const cacheKey = `leaderboard:top_speed:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+  offset = 0,
+): Promise<LeaderboardResult<TopSpeedEntry>> {
+  const extraKey = `${sameCarFilter?.make ?? 'all'}_${sameCarFilter?.model ?? 'all'}_${limit}_${offset}`;
 
-  return withCache(cacheKey, 60, async () => {
+  try {
     const { data, error } = await supabase.rpc('get_top_speed_leaderboard', {
       scope_type: scope,
+      period_type: period,
       filter_make: sameCarFilter?.make ?? null,
       filter_model: sameCarFilter?.model ?? null,
       limit_count: limit,
+      offset_count: offset,
     });
 
-    if (error) throw new Error(`top_speed_leaderboard: ${error.message}`);
+    if (error) throw error;
 
-    // RPC returns numeric rank as bigint string in some Postgres drivers
-    return (data ?? []).map((row: Record<string, unknown>) => ({
+    const rows: TopSpeedEntry[] = (data ?? []).map((row: Record<string, unknown>) => ({
       rank: Number(row.rank),
       user_id: row.user_id as string,
       display_name: (row.display_name as string | null) ?? 'Driver',
@@ -64,14 +89,24 @@ export async function fetchTopSpeedLeaderboard(
       top_speed: Number(row.top_speed),
       recorded_at: row.recorded_at as string,
     }));
-  });
+
+    // Cache to disk asynchronously
+    saveLeaderboardToCache('top_speed', period, scope, extraKey, rows).catch(() => {});
+
+    return { data: rows, fromCache: false };
+  } catch (err) {
+    // Attempt fallback from local cache
+    const cached = await getLeaderboardFromCache<TopSpeedEntry>('top_speed', period, scope, extraKey);
+    if (cached) {
+      return { data: cached.data, fromCache: true, cachedAt: cached.cachedAt };
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Drag Race Leaderboard
 // ---------------------------------------------------------------------------
-
-export type DragDistanceType = 'quarter_mile' | 'half_mile' | 'mile';
 
 export interface DragEntry {
   rank: number;
@@ -89,23 +124,27 @@ export interface DragEntry {
 export async function fetchDragLeaderboard(
   distanceType: DragDistanceType,
   scope: ScopeType,
+  period: PeriodType = 'all',
   sameCarFilter?: SameCarFilter,
   limit = 50,
-): Promise<DragEntry[]> {
-  const cacheKey = `leaderboard:drag:${distanceType}:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+  offset = 0,
+): Promise<LeaderboardResult<DragEntry>> {
+  const extraKey = `${distanceType}_${sameCarFilter?.make ?? 'all'}_${sameCarFilter?.model ?? 'all'}_${limit}_${offset}`;
 
-  return withCache(cacheKey, 60, async () => {
+  try {
     const { data, error } = await supabase.rpc('get_drag_leaderboard', {
       target_distance_type: distanceType,
       scope_type: scope,
+      period_type: period,
       filter_make: sameCarFilter?.make ?? null,
       filter_model: sameCarFilter?.model ?? null,
       limit_count: limit,
+      offset_count: offset,
     });
 
-    if (error) throw new Error(`drag_leaderboard: ${error.message}`);
+    if (error) throw error;
 
-    return (data ?? []).map((row: Record<string, unknown>) => ({
+    const rows: DragEntry[] = (data ?? []).map((row: Record<string, unknown>) => ({
       rank: Number(row.rank),
       user_id: row.user_id as string,
       display_name: (row.display_name as string | null) ?? 'Driver',
@@ -117,7 +156,17 @@ export async function fetchDragLeaderboard(
       top_speed: Number(row.top_speed),
       recorded_at: row.recorded_at as string,
     }));
-  });
+
+    saveLeaderboardToCache('drag', period, scope, extraKey, rows).catch(() => {});
+
+    return { data: rows, fromCache: false };
+  } catch (err) {
+    const cached = await getLeaderboardFromCache<DragEntry>('drag', period, scope, extraKey);
+    if (cached) {
+      return { data: cached.data, fromCache: true, cachedAt: cached.cachedAt };
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -137,22 +186,26 @@ export interface DistanceEntry {
 
 export async function fetchDistanceLeaderboard(
   scope: ScopeType,
+  period: PeriodType = 'all',
   sameCarFilter?: SameCarFilter,
   limit = 50,
-): Promise<DistanceEntry[]> {
-  const cacheKey = `leaderboard:distance:${scope}:${sameCarFilter?.make ?? 'all'}:${sameCarFilter?.model ?? 'all'}:${limit}`;
+  offset = 0,
+): Promise<LeaderboardResult<DistanceEntry>> {
+  const extraKey = `${sameCarFilter?.make ?? 'all'}_${sameCarFilter?.model ?? 'all'}_${limit}_${offset}`;
 
-  return withCache(cacheKey, 60, async () => {
+  try {
     const { data, error } = await supabase.rpc('get_distance_leaderboard', {
       scope_type: scope,
+      period_type: period,
       filter_make: sameCarFilter?.make ?? null,
       filter_model: sameCarFilter?.model ?? null,
       limit_count: limit,
+      offset_count: offset,
     });
 
-    if (error) throw new Error(`distance_leaderboard: ${error.message}`);
+    if (error) throw error;
 
-    return (data ?? []).map((row: Record<string, unknown>) => ({
+    const rows: DistanceEntry[] = (data ?? []).map((row: Record<string, unknown>) => ({
       rank: Number(row.rank),
       user_id: row.user_id as string,
       display_name: (row.display_name as string | null) ?? 'Driver',
@@ -162,5 +215,62 @@ export async function fetchDistanceLeaderboard(
       total_distance_m: Number(row.total_distance_m),
       total_trips: Number(row.total_trips),
     }));
-  });
+
+    saveLeaderboardToCache('distance', period, scope, extraKey, rows).catch(() => {});
+
+    return { data: rows, fromCache: false };
+  } catch (err) {
+    const cached = await getLeaderboardFromCache<DistanceEntry>('distance', period, scope, extraKey);
+    if (cached) {
+      return { data: cached.data, fromCache: true, cachedAt: cached.cachedAt };
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single-user rank resolution (for pinned 'You, #N' bar)
+// ---------------------------------------------------------------------------
+
+export type BoardTab = 'top_speed' | 'drag' | 'distance';
+
+export async function fetchUserRank(
+  userId: string,
+  boardType: 'top_speed' | 'drag' | 'distance',
+  period: PeriodType = 'all',
+  scope: ScopeType = 'global',
+  sameCarFilter?: SameCarFilter,
+  distanceType: DragDistanceType = 'quarter_mile',
+): Promise<UserRankResult | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.rpc as any)('get_my_leaderboard_rank', {
+      target_user_id: userId,
+      board_type: boardType,
+      period_type: period,
+      scope_type: scope,
+      filter_make: sameCarFilter?.make ?? null,
+      filter_model: sameCarFilter?.model ?? null,
+      target_distance_type: distanceType,
+    });
+
+    if (error || !data || (data as unknown[]).length === 0) return null;
+
+    const row = (data as Record<string, unknown>[])[0];
+    if (!row) return null;
+
+    return {
+      rank: Number(row.rank),
+      value: Number(row.value),
+      subValue: row.sub_value != null ? Number(row.sub_value) : null,
+      make: (row.make as string | null) ?? null,
+      model: (row.model as string | null) ?? null,
+      year: row.year != null ? Number(row.year) : null,
+    };
+  } catch (err) {
+    if (__DEV__) {
+      console.warn('[Rankings] fetchUserRank error:', err);
+    }
+    return null;
+  }
 }
