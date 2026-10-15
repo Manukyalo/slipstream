@@ -637,14 +637,26 @@ export type Database = {
         Row: {
           id: string
           name: string
+          slug: string
+          status: 'approved' | 'pending' | 'rejected'
+          created_by: string | null
+          created_at: string
         }
         Insert: {
           id?: string
           name: string
+          slug?: string
+          status?: 'approved' | 'pending' | 'rejected'
+          created_by?: string | null
+          created_at?: string
         }
         Update: {
           id?: string
           name?: string
+          slug?: string
+          status?: 'approved' | 'pending' | 'rejected'
+          created_by?: string | null
+          created_at?: string
         }
         Relationships: []
       }
@@ -653,16 +665,28 @@ export type Database = {
           id: string
           make_id: string
           name: string
+          slug: string
+          status: 'approved' | 'pending' | 'rejected'
+          created_by: string | null
+          created_at: string
         }
         Insert: {
           id?: string
           make_id: string
           name: string
+          slug?: string
+          status?: 'approved' | 'pending' | 'rejected'
+          created_by?: string | null
+          created_at?: string
         }
         Update: {
           id?: string
           make_id?: string
           name?: string
+          slug?: string
+          status?: 'approved' | 'pending' | 'rejected'
+          created_by?: string | null
+          created_at?: string
         }
         Relationships: [
           {
@@ -677,10 +701,15 @@ export type Database = {
       vehicles: {
         Row: {
           created_at: string
+          custom_make: string | null
+          custom_model: string | null
           id: string
+          is_custom: boolean
           is_primary: boolean
           make: string
+          make_id: string | null
           model: string
+          model_id: string | null
           nickname: string | null
           odometer: number | null
           photo_url: string | null
@@ -689,10 +718,15 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          custom_make?: string | null
+          custom_model?: string | null
           id?: string
+          is_custom?: boolean
           is_primary?: boolean
           make: string
+          make_id?: string | null
           model: string
+          model_id?: string | null
           nickname?: string | null
           odometer?: number | null
           photo_url?: string | null
@@ -701,17 +735,37 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          custom_make?: string | null
+          custom_model?: string | null
           id?: string
+          is_custom?: boolean
           is_primary?: boolean
           make?: string
+          make_id?: string | null
           model?: string
+          model_id?: string | null
           nickname?: string | null
           odometer?: number | null
           photo_url?: string | null
           user_id?: string
           year?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_make_id_fkey"
+            columns: ["make_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_makes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "vehicle_models"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

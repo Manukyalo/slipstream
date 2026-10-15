@@ -15,6 +15,7 @@ export async function fetchMakes(): Promise<VehicleMake[]> {
   const { data, error } = await supabase
     .from('vehicle_makes')
     .select('*')
+    .eq('status', 'approved')
     .order('name', { ascending: true });
 
   if (error) {
@@ -33,6 +34,7 @@ export async function fetchModels(makeId: string): Promise<VehicleModel[]> {
     .from('vehicle_models')
     .select('*')
     .eq('make_id', makeId)
+    .eq('status', 'approved')
     .order('name', { ascending: true });
 
   if (error) {
@@ -71,6 +73,10 @@ export interface CreateVehicleInput {
   nickname?: string | null;
   isPrimary?: boolean;
   localPhotoUri?: string | null;
+  // Catalogue linkage — populated when user selects from the picker
+  makeId?: string | null;
+  modelId?: string | null;
+  isCustom?: boolean;
 }
 
 /**
@@ -107,6 +113,10 @@ export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle>
     nickname: nickname?.trim() || null,
     is_primary: shouldBePrimary,
     photo_url: null,
+    // Catalogue linkage (nullable — backwards-compatible)
+    make_id: input.makeId ?? null,
+    model_id: input.modelId ?? null,
+    is_custom: input.isCustom ?? false,
   };
 
   const { data, error } = await supabase
