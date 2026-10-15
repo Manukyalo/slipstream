@@ -1838,4 +1838,8 @@ from (values
   ('zeekr', 'Mix', 'mix')
 ) as v(make_slug, name, slug)
 join public.vehicle_makes m on m.slug = v.make_slug
-on conflict (make_id, slug) do nothing;
+where not exists (
+  select 1 from public.vehicle_models ex
+  where ex.make_id = m.id and (ex.name = v.name or ex.slug = v.slug)
+)
+on conflict do nothing;
