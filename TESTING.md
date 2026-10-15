@@ -267,7 +267,8 @@ The following catalog lists all open issues and items classified by severity pri
 
 | Platform | Profile | Build ID | EAS Dashboard URL | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Android (AAB)** | `production` | `35a8f874-74a2-4e47-a494-142b5c575bad` | [View Build](https://expo.dev/accounts/manukyalo/projects/slipstream/builds/35a8f874-74a2-4e47-a494-142b5c575bad) &middot; [Download AAB](https://expo.dev/artifacts/eas/qJDEgJB_-5aSiKq-sPuZdSadFE3ZHmIkrKFbh0MCRS4.aab) | **PASSED** (Ready for Play Console) |
+| **Android Preview (APK)** | `preview` | `c6bfe167-98b9-4069-8a39-0b6b5eb32e4a` | [View Build](https://expo.dev/accounts/manukyalo/projects/slipstream/builds/c6bfe167-98b9-4069-8a39-0b6b5eb32e4a) &middot; [Download APK](https://expo.dev/artifacts/eas/vzW_0gLJHLbGJq9RzqwgQkQlICDwbAqm-7kxwO6zgZM.apk) | **PASSED** (Installable APK) |
+| **Android Store (AAB)** | `production` | `35a8f874-74a2-4e47-a494-142b5c575bad` | [View Build](https://expo.dev/accounts/manukyalo/projects/slipstream/builds/35a8f874-74a2-4e47-a494-142b5c575bad) &middot; [Download AAB](https://expo.dev/artifacts/eas/qJDEgJB_-5aSiKq-sPuZdSadFE3ZHmIkrKFbh0MCRS4.aab) | **PASSED** (Ready for Play Console) |
 | **iOS (IPA)** | `production` | Pending Credentials | Run `npx eas-cli credentials` to link Apple Dev account | Pending |
 
 ### Cloud EAS Build Commands
