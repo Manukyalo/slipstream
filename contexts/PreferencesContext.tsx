@@ -14,8 +14,13 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export type SpeedUnit = 'kmh' | 'mph';
 export type DistanceUnit = 'km' | 'mi';
+export type CurrencyCode = 'KES' | 'USD' | 'EUR' | 'GBP';
+export type { GaugeThemeName } from '@/constants/theme';
+import type { GaugeThemeName } from '@/constants/theme';
 
 const STORAGE_KEY = '@slipstream/units';
+const CURRENCY_STORAGE_KEY = '@slipstream/currency';
+const GAUGE_THEME_STORAGE_KEY = '@slipstream/gauge_theme';
 const KM_TO_MILES = 0.621371192;
 const MILES_TO_KM = 1.609344;
 
@@ -24,7 +29,11 @@ interface PreferencesContextValue {
   distanceUnit: DistanceUnit;
   speedUnitLabel: string;
   distanceUnitLabel: string;
+  currency: CurrencyCode;
+  gaugeTheme: GaugeThemeName;
   setSpeedUnit: (unit: SpeedUnit) => Promise<void>;
+  setCurrency: (curr: CurrencyCode) => Promise<void>;
+  setGaugeTheme: (theme: GaugeThemeName) => Promise<void>;
   /** Convert km/h into active speed unit value */
   convertSpeed: (kmh: number) => number;
   /** Convert kilometres into active distance unit value */
@@ -40,6 +49,8 @@ interface PreferencesContextValue {
   ) => string;
   /** Format vehicle odometer reading */
   formatOdometer: (odometerKm: number) => string;
+  /** Format currency amount with currency code (e.g. KES 0, KES 1,500) */
+  formatCurrency: (amount: number, currencyOverride?: string) => string;
 }
 
 const PreferencesContext = createContext<PreferencesContextValue | null>(null);
@@ -47,16 +58,23 @@ const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 export function PreferencesProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [speedUnit, setSpeedUnitState] = useState<SpeedUnit>('kmh');
+  const [currency, setCurrencyState] = useState<CurrencyCode>('KES');
+  const [gaugeTheme, setGaugeThemeState] = useState<GaugeThemeName>('slipstream');
   const [loaded, setLoaded] = useState<boolean>(false);
 
-  // Load initial unit preference from storage / user metadata
+  // Load initial unit & currency preference from storage / user metadata
   useEffect(() => {
     let active = true;
     async function loadPreference() {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (stored === 'kmh' || stored === 'mph') {
-          if (active) setSpeedUnitState(stored);
+        const [storedUnit, storedCurrency, storedGaugeTheme] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEY),
+          AsyncStorage.getItem(CURRENCY_STORAGE_KEY),
+          AsyncStorage.getItem(GAUGE_THEME_STORAGE_KEY),
+        ]);
+
+        if (storedUnit === 'kmh' || storedUnit === 'mph') {
+          if (active) setSpeedUnitState(storedUnit);
         } else if (user?.user_metadata?.speed_unit) {
           const metaUnit = user.user_metadata.speed_unit;
           if (metaUnit === 'kmh' || metaUnit === 'mph') {
@@ -64,8 +82,34 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
             await AsyncStorage.setItem(STORAGE_KEY, metaUnit);
           }
         }
+
+        if (storedCurrency && ['KES', 'USD', 'EUR', 'GBP'].includes(storedCurrency)) {
+          if (active) setCurrencyState(storedCurrency as CurrencyCode);
+        } else if (user?.user_metadata?.currency) {
+          const metaCurr = user.user_metadata.currency;
+          if (['KES', 'USD', 'EUR', 'GBP'].includes(metaCurr)) {
+            if (active) setCurrencyState(metaCurr as CurrencyCode);
+            await AsyncStorage.setItem(CURRENCY_STORAGE_KEY, metaCurr);
+          }
+        }
+
+        if (storedGaugeTheme === 'slipstream' || storedGaugeTheme === 'sport') {
+          if (active) setGaugeThemeState(storedGaugeTheme);
+        } else if (user) {
+          // Attempt to hydrate from profiles table on first load
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('gauge_theme')
+            .eq('id', user.id)
+            .single();
+          const dbTheme = profileRow?.gauge_theme;
+          if (dbTheme === 'slipstream' || dbTheme === 'sport') {
+            if (active) setGaugeThemeState(dbTheme);
+            await AsyncStorage.setItem(GAUGE_THEME_STORAGE_KEY, dbTheme);
+          }
+        }
       } catch (err) {
-        console.warn('[Preferences] Failed to load units:', err);
+        console.warn('[Preferences] Failed to load preferences:', err);
       } finally {
         if (active) setLoaded(true);
       }
@@ -88,6 +132,43 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
         }
       } catch (err) {
         console.warn('[Preferences] Failed to persist units:', err);
+      }
+    },
+    [user],
+  );
+
+  const setCurrency = useCallback(
+    async (newCurrency: CurrencyCode) => {
+      setCurrencyState(newCurrency);
+      try {
+        await AsyncStorage.setItem(CURRENCY_STORAGE_KEY, newCurrency);
+        if (user) {
+          await supabase.auth.updateUser({
+            data: { currency: newCurrency },
+          });
+        }
+      } catch (err) {
+        console.warn('[Preferences] Failed to persist currency:', err);
+      }
+    },
+    [user],
+  );
+
+  const setGaugeTheme = useCallback(
+    async (newTheme: GaugeThemeName) => {
+      // Instant local update — works offline
+      setGaugeThemeState(newTheme);
+      try {
+        await AsyncStorage.setItem(GAUGE_THEME_STORAGE_KEY, newTheme);
+        if (user) {
+          // Sync to profiles table so the preference follows the user to other devices
+          await supabase
+            .from('profiles')
+            .update({ gauge_theme: newTheme })
+            .eq('id', user.id);
+        }
+      } catch (err) {
+        console.warn('[Preferences] Failed to persist gauge theme:', err);
       }
     },
     [user],
@@ -160,32 +241,57 @@ export function PreferencesProvider({ children }: { children: React.ReactNode })
     [convertDistanceKm, distanceUnitLabel],
   );
 
+  const formatCurrency = useCallback(
+    (amount: number, currencyOverride?: string): string => {
+      const activeCurrency = currencyOverride || currency;
+      if (!Number.isFinite(amount) || amount === 0) {
+        return `${activeCurrency} 0`;
+      }
+      const formattedNum =
+        amount % 1 === 0
+          ? amount.toLocaleString('en-US')
+          : amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return `${activeCurrency} ${formattedNum}`;
+    },
+    [currency],
+  );
+
   const value = useMemo(
     () => ({
       speedUnit,
       distanceUnit,
       speedUnitLabel,
       distanceUnitLabel,
+      currency,
+      gaugeTheme,
       setSpeedUnit,
+      setCurrency,
+      setGaugeTheme,
       convertSpeed,
       convertDistanceKm,
       convertMetersToDistance,
       formatSpeed,
       formatDistance,
       formatOdometer,
+      formatCurrency,
     }),
     [
       speedUnit,
       distanceUnit,
       speedUnitLabel,
       distanceUnitLabel,
+      currency,
+      gaugeTheme,
       setSpeedUnit,
+      setCurrency,
+      setGaugeTheme,
       convertSpeed,
       convertDistanceKm,
       convertMetersToDistance,
       formatSpeed,
       formatDistance,
       formatOdometer,
+      formatCurrency,
     ],
   );
 

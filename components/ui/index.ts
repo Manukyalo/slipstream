@@ -34,3 +34,5 @@ export { BottomSheet } from './BottomSheet';
 export { OtaUpdateBanner } from './OtaUpdateBanner';
 export { OfflineSyncBanner } from './OfflineSyncBanner';
 export { SplashGate } from './SplashGate';
+export { ClusterGauge } from './ClusterGauge';
+export type { ClusterGaugeMode, ClusterGaugeProps } from './ClusterGauge';

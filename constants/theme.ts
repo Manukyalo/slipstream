@@ -81,6 +81,74 @@ export const Gradient = {
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GaugeThemes  —  ClusterGauge colour palettes
+// Two named themes; all hex lives here, never inline in components.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const GaugeThemes = {
+  /**
+   * Slipstream (default) — cyan → blue gradient, amber warning, red danger.
+   * Unlit segments: surface-3 dark.  Glow: cyan.
+   */
+  slipstream: {
+    /** Segments 0–39 % of scale */
+    segLow:      '#22D3EE',                    // accent.cyan
+    /** Segments 40–66 % of scale */
+    segMid:      '#3B82F6',                    // accent.blue
+    /** Segments above warning threshold (>120 km/h or >75 mph) */
+    segHigh:     '#F59E0B',                    // semantic.warning amber
+    /** Segments above danger threshold (>180 km/h or >110 mph) */
+    segDanger:   '#F43F5E',                    // semantic.danger red
+    /** Unlit (dark) segment fill */
+    segUnlit:    '#1A2133',                    // surface-3
+    /** Stroke on zone-boundary segments — visible in greyscale */
+    zoneBevel:   'rgba(255,255,255,0.0)',      // none for Slipstream
+    /** Centre glow backdrop colour */
+    glowBg:      'rgba(34,211,238,0.08)',      // cyanGlow
+    /** Centre glow border colour */
+    glowBorder:  'rgba(34,211,238,0.20)',
+    /** Peak marker accent */
+    peakMarker:  '#22D3EE',
+    /** Start Drive CTA gradient (left → right) */
+    ctaGradient: ['#22D3EE', '#3B82F6'] as readonly [string, string],
+    /** Digital digit shadow glow */
+    digitGlow:   'rgba(34,211,238,0.18)',
+  },
+
+  /**
+   * Sport — deep red → bright red, orange, white-hot.
+   * Unlit segments: near-black with a faint red tint.
+   * Zone boundaries receive a thin silver bevel for greyscale accessibility.
+   */
+  sport: {
+    /** Segments 0–44 % of scale */
+    segLow:      '#B91C1C',                    // deep red
+    /** Segments 45–66 % of scale */
+    segMid:      '#F43F5E',                    // bright red
+    /** Segments 67–89 % of scale — hot orange */
+    segHigh:     '#FB923C',                    // hot orange
+    /** Top 10 % of scale — white-hot */
+    segDanger:   '#FFFFFF',                    // white-hot
+    /** Unlit segment fill — near-black with red tint */
+    segUnlit:    '#1A1114',
+    /** Thin silver/white bevel on zone-boundary segments (greyscale accessibility) */
+    zoneBevel:   'rgba(255,255,255,0.40)',
+    /** Centre glow backdrop colour */
+    glowBg:      'rgba(244,63,94,0.12)',
+    /** Centre glow border colour */
+    glowBorder:  'rgba(244,63,94,0.30)',
+    /** Peak marker accent */
+    peakMarker:  '#F43F5E',
+    /** Start Drive CTA gradient (left → right) */
+    ctaGradient: ['#B91C1C', '#F43F5E'] as readonly [string, string],
+    /** Digital digit shadow glow */
+    digitGlow:   'rgba(244,63,94,0.18)',
+  },
+} as const;
+
+export type GaugeThemeName = keyof typeof GaugeThemes;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Spacing  —  4-pt grid
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -248,6 +316,7 @@ export const Theme = {
   // Structured token sets
   Colors,
   Gradient,
+  GaugeThemes,
   Spacing,
   Radius,
   FontFamily,

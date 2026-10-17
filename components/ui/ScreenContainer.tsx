@@ -49,6 +49,12 @@ interface ScreenContainerProps {
   largeTitle?: boolean;
   /** Rendered to the right of the title bar */
   headerRight?: React.ReactNode;
+  /** Rendered to the left of the title bar (e.g. Back/Cancel) */
+  headerLeft?: React.ReactNode;
+  /** Custom element in the center of header */
+  headerCenter?: React.ReactNode;
+  /** Subtitle shown below title */
+  subtitle?: string;
   /** Extra style for the inner content container */
   contentStyle?: ViewStyle;
   /** Forwarded to ScrollView when scrollable=true */
@@ -73,6 +79,9 @@ export function ScreenContainer({
   title,
   largeTitle = false,
   headerRight,
+  headerLeft,
+  headerCenter,
+  subtitle,
   contentStyle,
   scrollViewProps,
   skipTopInset = false,
@@ -98,7 +107,7 @@ export function ScreenContainer({
       })
     : null;
 
-  const hasHeader = Boolean(title);
+  const hasHeader = Boolean(title || headerLeft || headerRight || headerCenter);
 
   return (
     <View style={[styles.root, { backgroundColor: Colors.bg.base }]}>
@@ -114,21 +123,40 @@ export function ScreenContainer({
             },
           ]}
         >
-          {/* Small collapsed title — only animated when largeTitle=true */}
+          {/* Header row */}
           <View style={styles.headerRow}>
-            {largeTitle && smallTitleOpacity ? (
-              <Animated.Text
-                style={[styles.smallTitle, { opacity: smallTitleOpacity }]}
-                numberOfLines={1}
-              >
-                {title}
-              </Animated.Text>
+            {headerLeft && <View style={styles.headerLeft}>{headerLeft}</View>}
+
+            {headerCenter ? (
+              <View style={styles.headerCenterWrap}>{headerCenter}</View>
             ) : (
-              <Animated.Text style={styles.smallTitle} numberOfLines={1}>
-                {title}
-              </Animated.Text>
+              <View style={[styles.titleWrap, Boolean(headerLeft) && styles.titleWrapWithLeft]}>
+                {largeTitle && smallTitleOpacity ? (
+                  <Animated.Text
+                    style={[styles.smallTitle, { opacity: smallTitleOpacity }]}
+                    numberOfLines={1}
+                  >
+                    {title}
+                  </Animated.Text>
+                ) : title ? (
+                  <Animated.Text style={styles.smallTitle} numberOfLines={1}>
+                    {title}
+                  </Animated.Text>
+                ) : null}
+
+                {subtitle && (
+                  <Animated.Text style={styles.headerSubtitle} numberOfLines={1}>
+                    {subtitle}
+                  </Animated.Text>
+                )}
+              </View>
             )}
-            {headerRight && <View style={styles.headerRight}>{headerRight}</View>}
+
+            {headerRight ? (
+              <View style={styles.headerRight}>{headerRight}</View>
+            ) : headerLeft ? (
+              <View style={styles.headerRightSpacer} />
+            ) : null}
           </View>
         </View>
       )}
@@ -198,10 +226,38 @@ const styles = StyleSheet.create({
   smallTitle: {
     ...Typography.heading,
     color:  Colors.text.primary,
-    flex:   1,
+  },
+  headerLeft: {
+    marginRight: Spacing.gap,
+    minWidth: 44,
+    alignItems: 'flex-start',
+  },
+  headerCenterWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleWrap: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  titleWrapWithLeft: {
+    alignItems: 'center',
+  },
+  headerSubtitle: {
+    ...Typography.label,
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.text.tertiary,
+    marginTop: 1,
   },
   headerRight: {
     marginLeft: Spacing.gap,
+    minWidth: 44,
+    alignItems: 'flex-end',
+  },
+  headerRightSpacer: {
+    minWidth: 44,
   },
   largeTitle: {
     ...Typography.title,

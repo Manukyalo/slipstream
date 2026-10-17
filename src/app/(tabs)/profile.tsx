@@ -28,7 +28,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Text } from '@/components/ui/Text';
 import { Icon } from '@/components/ui/Icon';
 import { Segmented } from '@/components/ui/Segmented';
-import { Gauge } from '@/components/ui/Gauge';
+import { ClusterGauge } from '@/components/ui/ClusterGauge';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { MetricCard } from '@/components/stats/MetricCard';
@@ -276,37 +276,13 @@ const heroStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TopSpeedCard({ speedKmh, hasData }: { speedKmh: number; hasData: boolean }) {
-  const { convertSpeed, speedUnitLabel } = usePreferences();
-  const displaySpeed = hasData ? Math.round(convertSpeed(speedKmh)) : '—';
-
   return (
     <View style={speedStyles.card}>
-      <View style={speedStyles.labelRow}>
-        <View style={speedStyles.iconWrap}>
-          <Icon name="speedometer" size={18} color={Colors.accent.cyan} weight="duotone" />
-        </View>
-        <View>
-          <Text variant="label" color={Colors.text.tertiary} style={speedStyles.label}>
-            Top Speed
-          </Text>
-          <View style={speedStyles.valueRow}>
-            <Text
-              variant="metricXL"
-              color={hasData ? Colors.text.primary : Colors.text.tertiary}
-              tabular
-              style={speedStyles.valueText}
-            >
-              {displaySpeed}
-            </Text>
-            {hasData && (
-              <Text variant="label" color={Colors.text.tertiary}>
-                {speedUnitLabel}
-              </Text>
-            )}
-          </View>
-        </View>
-      </View>
-      <Gauge speedKmh={hasData ? speedKmh : 0} size={160} />
+      <ClusterGauge
+        mode="peak"
+        speedKmh={speedKmh}
+        hasData={hasData}
+      />
     </View>
   );
 }
@@ -319,33 +295,7 @@ const speedStyles = StyleSheet.create({
     borderColor: Colors.hairline,
     padding: Spacing.card,
     alignItems: 'center',
-    gap: Spacing.gap,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing[2],
-    alignSelf: 'flex-start',
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.iconChip,
-    backgroundColor: 'rgba(34,211,238,0.12)',
-    alignItems: 'center',
     justifyContent: 'center',
-  },
-  label: {
-    marginBottom: 2,
-  },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-  },
-  valueText: {
-    fontSize: 28,
-    lineHeight: 32,
   },
 });
 

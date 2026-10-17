@@ -22,11 +22,11 @@ export const MAINTENANCE_TYPE_LABELS: Record<MaintenanceType, string> = {
 import type { IconName } from '@/components/ui/Icon';
 
 export const MAINTENANCE_TYPE_ICONS: Record<MaintenanceType, IconName> = {
-  oil_change: 'gear',
-  tires: 'speedometer',
-  brakes: 'warning',
-  battery: 'lightning',
-  inspection: 'search',
+  oil_change: 'drop',
+  tires: 'circle-notch',
+  brakes: 'disc',
+  battery: 'battery-high',
+  inspection: 'clipboard-text',
   other: 'wrench',
 };
 
@@ -38,15 +38,19 @@ export interface CreateMaintenanceLogInput {
   cost: number;
   serviceDate: string; // YYYY-MM-DD
   nextDueDate?: string | null; // YYYY-MM-DD
+  nextDueOdometer?: number | null;
+  currency?: string;
   vehicleName?: string;
 }
 
 export interface VehicleMaintenanceSummary {
   totalLogs: number;
   totalCost: number;
+  currency?: string;
   latestOdometer: number;
   latestServiceDate: string | null;
   nextDueDate: string | null;
+  nextDueOdometer?: number | null;
   upcomingServiceType: MaintenanceType | null;
 }
 
@@ -97,7 +101,7 @@ export async function createMaintenanceLog(
     throw new Error('Service date is required');
   }
 
-  const payload: MaintenanceLogInsert = {
+  const basePayload: Record<string, unknown> = {
     vehicle_id: input.vehicleId,
     user_id: user.id,
     type: input.type,
@@ -108,15 +112,53 @@ export async function createMaintenanceLog(
     next_due_date: input.nextDueDate || null,
   };
 
-  const { data, error } = await supabase
+  if (input.currency) {
+    basePayload.currency = input.currency;
+  }
+  if (input.nextDueOdometer !== undefined && input.nextDueOdometer !== null) {
+    basePayload.next_due_odometer = input.nextDueOdometer;
+  }
+
+  let data: MaintenanceLog | null = null;
+  let insertError: { message: string } | null = null;
+
+  // Try insert with new fields first
+  const res = await supabase
     .from('maintenance_logs')
-    .insert(payload)
+    .insert(basePayload as unknown as MaintenanceLogInsert)
     .select()
     .single();
 
-  if (error || !data) {
-    console.error('[Maintenance] Insert error:', error?.message);
-    throw new Error(`Failed to save maintenance record: ${error?.message ?? 'Unknown error'}`);
+  if (res.error) {
+    // If column doesn't exist yet on remote schema, retry with baseline columns
+    if (res.error.message.includes('currency') || res.error.message.includes('next_due_odometer')) {
+      const fallbackPayload: MaintenanceLogInsert = {
+        vehicle_id: input.vehicleId,
+        user_id: user.id,
+        type: input.type,
+        description: desc,
+        odometer: odo,
+        cost,
+        service_date: input.serviceDate,
+        next_due_date: input.nextDueDate || null,
+      };
+      const fallbackRes = await supabase
+        .from('maintenance_logs')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+      data = fallbackRes.data as MaintenanceLog | null;
+      insertError = fallbackRes.error;
+    } else {
+      insertError = res.error;
+    }
+  } else {
+    data = res.data as MaintenanceLog | null;
+  }
+
+  if (insertError || !data) {
+    console.error('[Maintenance] Insert error:', insertError?.message);
+    throw new Error(`Failed to save maintenance record: ${insertError?.message ?? 'Unknown error'}`);
   }
 
   // Schedule notification if next_due_date is provided

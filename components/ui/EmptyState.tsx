@@ -25,6 +25,8 @@ import type { IconName } from './Icon';
 interface EmptyStateAction {
   label: string;
   onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  fullWidth?: boolean;
 }
 
 interface EmptyStateProps {
@@ -60,14 +62,16 @@ export function EmptyState({
       </View>
 
       {action && (
-        <Button
-          variant="secondary"
-          onPress={action.onPress}
-          style={styles.action}
-          compact
-        >
-          {action.label}
-        </Button>
+        <View style={action.fullWidth ? styles.actionFullWidthWrap : undefined}>
+          <Button
+            variant={action.variant ?? 'secondary'}
+            onPress={action.onPress}
+            style={[styles.action, action.fullWidth && styles.actionFullWidth]}
+            compact={!action.fullWidth}
+          >
+            {action.label}
+          </Button>
+        </View>
       )}
     </View>
   );
@@ -91,5 +95,13 @@ const styles = StyleSheet.create({
   },
   action: {
     marginTop: Spacing[2],
+  },
+  actionFullWidthWrap: {
+    width: '100%',
+    paddingHorizontal: Spacing.screen,
+    alignItems: 'center',
+  },
+  actionFullWidth: {
+    width: '100%',
   },
 });

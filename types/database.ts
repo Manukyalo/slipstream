@@ -309,6 +309,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           display_name: string | null
+          gauge_theme: string | null
           id: string
           referral_code: string | null
           supporter_badge: string | null
@@ -318,6 +319,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          gauge_theme?: string | null
           id: string
           referral_code?: string | null
           supporter_badge?: string | null
@@ -327,6 +329,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           display_name?: string | null
+          gauge_theme?: string | null
           id?: string
           referral_code?: string | null
           supporter_badge?: string | null

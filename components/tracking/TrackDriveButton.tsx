@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Colors, FontFamily, Radius, Typography } from '@/constants/theme';
+import { Colors, FontFamily, GaugeThemes, Radius, Typography } from '@/constants/theme';
+import { usePreferences } from '@/contexts/PreferencesContext';
 import { Icon } from '@/components/ui/Icon';
 
 interface TrackDriveButtonProps {
@@ -36,6 +37,8 @@ export function TrackDriveButton({
   onStart,
   onStop,
 }: TrackDriveButtonProps) {
+  const { gaugeTheme } = usePreferences();
+  const gaugeThemeTokens = GaugeThemes[gaugeTheme];
   const [holding, setHolding] = useState(false);
   const [holdProgress] = useState(() => new Animated.Value(0));
   const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,13 +110,13 @@ export function TrackDriveButton({
         style={styles.base}
       >
         <LinearGradient
-          colors={['#22D3EE', '#3B82F6']}
+          colors={gaugeThemeTokens.ctaGradient as [string, string]}
           start={{ x: 0, y: 1 }}
           end={{ x: 1, y: 0 }}
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.contentRow}>
-          <Icon name="play" size={20} color="#05070D" weight="fill" />
+          <Icon name="play" size={20} color={Colors.bg.base} weight="fill" />
           <Text style={styles.startLabel}>Start drive</Text>
         </View>
       </TouchableOpacity>
@@ -169,7 +172,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.display,
     fontSize: 16,
     fontWeight: '700',
-    color: '#05070D',
+    color: Colors.bg.base,
     letterSpacing: 0.3,
   },
   stopBtnContainer: {

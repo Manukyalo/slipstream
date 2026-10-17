@@ -26,7 +26,7 @@ import { useVehicles } from '@/hooks/useVehicles';
 import { useOfflineMap } from '@/hooks/useOfflineMap';
 import { useHazardAlerts } from '@/hooks/useHazardAlerts';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
-import { Gauge } from '@/components/ui/Gauge';
+import { ClusterGauge } from '@/components/ui/ClusterGauge';
 import { TrackTopPill } from '@/components/tracking/TrackTopPill';
 import { TrackDriveButton } from '@/components/tracking/TrackDriveButton';
 import { IconChip } from '@/components/ui/IconChip';
@@ -78,6 +78,26 @@ export default function TrackScreen() {
 
   // Pulsing animation for the recording indicator
   const [recPulseAnim] = useState(() => new Animated.Value(1));
+
+  // Dynamic longitudinal G-force calculation based on speed delta
+  // useRef initial value must be a stable constant — seed via lazy useState so Date.now() runs once at mount.
+  const [_prevSpeedSeed] = useState<{ speed: number; time: number }>(() => ({
+    speed: currentSpeedKmh,
+    time: Date.now(),
+  }));
+  const prevSpeedRef = React.useRef(_prevSpeedSeed);
+  const [longitudinalG, setLongitudinalG] = useState(0);
+
+  useEffect(() => {
+    const now = Date.now();
+    const dt = (now - prevSpeedRef.current.time) / 1000;
+    if (dt >= 0.2) {
+      const dv = (currentSpeedKmh - prevSpeedRef.current.speed) / 3.6; // m/s
+      const g = dv / dt / 9.80665;
+      setLongitudinalG(isTracking ? Math.max(-1.2, Math.min(1.2, g)) : 0);
+      prevSpeedRef.current = { speed: currentSpeedKmh, time: now };
+    }
+  }, [currentSpeedKmh, isTracking]);
 
   useEffect(() => {
     let pulseLoop: Animated.CompositeAnimation | null = null;
@@ -307,9 +327,19 @@ export default function TrackScreen() {
             )}
           </View>
 
-          {/* Center Instrument: Precision 0 to 260 km/h Gauge */}
+          {/* Center Instrument: BMW M5 Inspired ClusterGauge */}
           <View style={styles.gaugeContainer}>
-            <Gauge speedKmh={currentSpeedKmh} maxDialSpeed={260} size={250} />
+            <ClusterGauge
+              mode="live"
+              speedKmh={currentSpeedKmh}
+              maxSpeedKmh={260}
+              longitudinalG={longitudinalG}
+              tripDistanceKm={distanceMeters / 1000}
+              gpsStatus={isGpsAcquiring ? 'acquiring' : 'locked'}
+              vehiclePhotoUrl={primaryVehicle?.photo_url}
+              vehicleLabel={primaryVehicle ? `${primaryVehicle.year} ${primaryVehicle.make} ${primaryVehicle.model}` : undefined}
+              hasData={isTracking || currentSpeedKmh > 0}
+            />
           </View>
 
           {/* 3 Metric Tiles (Distance, Elapsed, Average) with Phosphor IconChips */}

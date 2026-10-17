@@ -69,6 +69,11 @@ import {
   BookmarkSimple,
   MagnifyingGlass,
   Wrench,
+  Drop,
+  Disc,
+  CircleNotch,
+  BatteryHigh,
+  ClipboardText,
 } from 'phosphor-react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,6 +152,11 @@ const ICON_MAP = {
   bookmark:       BookmarkSimple,
   search:         MagnifyingGlass,
   wrench:         Wrench,
+  drop:           Drop,
+  disc:           Disc,
+  'circle-notch': CircleNotch,
+  'battery-high': BatteryHigh,
+  'clipboard-text': ClipboardText,
 } as const satisfies Record<string, React.ComponentType<{ size?: number; color?: string; weight?: IconWeight; style?: object }>>;
 
 // ─────────────────────────────────────────────────────────────────────────────

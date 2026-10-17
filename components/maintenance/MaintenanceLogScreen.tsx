@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { Icon } from '@/components/ui/Icon';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { usePreferences } from '@/contexts/PreferencesContext';
 import {
   deleteMaintenanceLog,
   fetchMaintenanceLogs,
@@ -33,10 +35,6 @@ interface MaintenanceLogScreenProps {
   onClose: () => void;
 }
 
-function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
@@ -47,57 +45,29 @@ function formatOdometer(odo: number): string {
   return odo.toLocaleString('en-US') + ' km';
 }
 
-function daysUntil(iso: string): number {
-  const due = new Date(iso + 'T00:00:00').getTime();
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.ceil((due - now.getTime()) / (1000 * 60 * 60 * 24));
-}
-
 // ─── Summary Strip ──────────────────────────────────────────────────────────
 
 interface SummaryStripProps {
   summary: VehicleMaintenanceSummary;
+  formatCurrency: (amount: number, override?: string) => string;
 }
 
-function SummaryStrip({ summary }: SummaryStripProps) {
+function SummaryStrip({ summary, formatCurrency }: SummaryStripProps) {
   const hasDue = !!summary.nextDueDate;
-  const days = hasDue ? daysUntil(summary.nextDueDate!) : null;
-  const isOverdue = days !== null && days < 0;
-  const isDueSoon = days !== null && days >= 0 && days <= 14;
-
-  let dueColor: string = Colors.text.secondary;
-  let dueBg: string = Colors.surface['2'];
-  let dueBorder: string = Colors.hairline;
-  if (isOverdue) {
-    dueColor = Colors.semantic.danger;
-    dueBg = Colors.tint.danger;
-    dueBorder = Colors.semantic.danger;
-  } else if (isDueSoon) {
-    dueColor = Colors.semantic.warning;
-    dueBg = Colors.tint.warning;
-    dueBorder = Colors.semantic.warning;
-  }
-
-  const dueLabel = hasDue
-    ? isOverdue
-      ? `${Math.abs(days!)}d overdue`
-      : days === 0
-        ? 'Due today'
-        : `Due in ${days}d`
-    : 'No upcoming service';
 
   return (
     <View style={styles.summaryStrip}>
-      {/* Total spend */}
+      {/* Column 1: Total spend */}
       <View style={styles.summaryCell}>
-        <Text style={styles.summaryCellValue}>{formatCurrency(summary.totalCost)}</Text>
+        <Text style={styles.summaryCellValue}>
+          {formatCurrency(summary.totalCost, summary.currency)}
+        </Text>
         <Text style={styles.summaryCellLabel}>Total Spend</Text>
       </View>
 
       <View style={styles.summarySep} />
 
-      {/* Total logs */}
+      {/* Column 2: Total service records */}
       <View style={styles.summaryCell}>
         <Text style={styles.summaryCellValue}>{summary.totalLogs}</Text>
         <Text style={styles.summaryCellLabel}>Service Records</Text>
@@ -105,18 +75,12 @@ function SummaryStrip({ summary }: SummaryStripProps) {
 
       <View style={styles.summarySep} />
 
-      {/* Next due */}
+      {/* Column 3: Next Service */}
       <View style={styles.summaryCell}>
-        <View style={[styles.dueBadge, { backgroundColor: dueBg, borderColor: dueBorder }]}>
-          <Text style={[styles.dueBadgeText, { color: dueColor }]}>
-            {hasDue
-              ? `${MAINTENANCE_TYPE_ICONS[summary.upcomingServiceType ?? 'other']} ${dueLabel}`
-              : dueLabel}
-          </Text>
-        </View>
-        <Text style={styles.summaryCellLabel}>
-          {hasDue ? formatDate(summary.nextDueDate) : 'Next Service'}
+        <Text style={styles.summaryCellValue} numberOfLines={1}>
+          {hasDue ? formatDate(summary.nextDueDate) : 'None'}
         </Text>
+        <Text style={styles.summaryCellLabel}>Next Service</Text>
       </View>
     </View>
   );
@@ -127,9 +91,10 @@ function SummaryStrip({ summary }: SummaryStripProps) {
 interface LogRowProps {
   log: MaintenanceLog;
   onDelete: (id: string) => void;
+  formatCurrency: (amount: number, override?: string) => string;
 }
 
-function LogRow({ log, onDelete }: LogRowProps) {
+function LogRow({ log, onDelete, formatCurrency }: LogRowProps) {
   const type = log.type as MaintenanceType;
 
   const handleDelete = () => {
@@ -143,6 +108,8 @@ function LogRow({ log, onDelete }: LogRowProps) {
     );
   };
 
+  const logCurrency = (log as unknown as { currency?: string }).currency;
+
   return (
     <View style={styles.logRow}>
       <View style={styles.logIconBox}>
@@ -154,7 +121,7 @@ function LogRow({ log, onDelete }: LogRowProps) {
           <Text style={styles.logType} numberOfLines={1}>
             {MAINTENANCE_TYPE_LABELS[type] ?? 'Service'}
           </Text>
-          <Text style={styles.logCost}>{formatCurrency(Number(log.cost))}</Text>
+          <Text style={styles.logCost}>{formatCurrency(Number(log.cost), logCurrency)}</Text>
         </View>
 
         <Text style={styles.logDesc} numberOfLines={2}>
@@ -197,6 +164,7 @@ export function MaintenanceLogScreen({
   vehicleName,
   onClose,
 }: MaintenanceLogScreenProps) {
+  const { formatCurrency } = usePreferences();
   const [logs, setLogs] = useState<MaintenanceLog[]>([]);
   const [summary, setSummary] = useState<VehicleMaintenanceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -253,34 +221,36 @@ export function MaintenanceLogScreen({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.root}>
-        {/* Header */}
-        <View style={styles.header}>
+      <ScreenContainer
+        title="Maintenance Log"
+        subtitle={vehicleName}
+        headerLeft={
           <Pressable
-            style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.headerBackBtn, pressed && styles.pressed]}
             onPress={onClose}
-            hitSlop={8}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
           >
-            <Text style={styles.closeBtnText}>‹ Back</Text>
+            <Icon name="arrow-left" size={20} color={Colors.text.primary} />
           </Pressable>
-
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Maintenance Log</Text>
-            <Text style={styles.headerSub} numberOfLines={1}>
-              {vehicleName}
-            </Text>
-          </View>
-
+        }
+        headerRight={
           <Pressable
             style={({ pressed }) => [styles.addBtn, pressed && styles.pressed]}
             onPress={() => setAddModalVisible(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Log service"
           >
             <Text style={styles.addBtnText}>+ Log</Text>
           </Pressable>
-        </View>
-
+        }
+      >
         {/* Summary strip */}
-        {summary && !isLoading && <SummaryStrip summary={summary} />}
+        {summary && !isLoading && (
+          <SummaryStrip summary={summary} formatCurrency={formatCurrency} />
+        )}
 
         {/* Content */}
         {isLoading ? (
@@ -301,8 +271,10 @@ export function MaintenanceLogScreen({
             title="No service records yet"
             description="Log your first maintenance entry to track costs and schedule reminders."
             action={{
-              label: 'Log First Service',
+              label: 'Log first service',
               onPress: () => setAddModalVisible(true),
+              variant: 'primary',
+              fullWidth: true,
             }}
           />
         ) : (
@@ -310,7 +282,7 @@ export function MaintenanceLogScreen({
             data={logs}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <LogRow log={item} onDelete={handleDelete} />
+              <LogRow log={item} onDelete={handleDelete} formatCurrency={formatCurrency} />
             )}
             contentContainerStyle={styles.listContent}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -326,7 +298,7 @@ export function MaintenanceLogScreen({
           onClose={() => setAddModalVisible(false)}
           onSaved={handleSaved}
         />
-      </View>
+      </ScreenContainer>
     </Modal>
   );
 }
@@ -372,6 +344,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.accent.cyan,
   },
+  headerBackBtn: {
+    padding: Spacing[1],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   addBtn: {
     backgroundColor: Colors.tint.cyan,
     borderWidth: 1,
@@ -390,7 +367,7 @@ const styles = StyleSheet.create({
   // Summary strip
   summaryStrip: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
     backgroundColor: Colors.surface['1'],
     borderBottomWidth: 1,
     borderBottomColor: Colors.hairline,
@@ -400,32 +377,27 @@ const styles = StyleSheet.create({
   summaryCell: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
   },
   summaryCellValue: {
     fontFamily: FontFamily.display,
     fontSize: 16,
+    lineHeight: 20,
     color: Colors.text.primary,
+    textAlign: 'center',
   },
   summaryCellLabel: {
     fontFamily: FontFamily.body,
     fontSize: 12,
     color: Colors.text.tertiary,
+    textAlign: 'center',
   },
   summarySep: {
     width: 1,
+    height: 32,
     backgroundColor: Colors.hairline,
     marginVertical: 4,
-  },
-  dueBadge: {
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: Spacing[2],
-    paddingVertical: 2,
-  },
-  dueBadgeText: {
-    fontFamily: FontFamily.heading,
-    fontSize: 12,
   },
   // Log list
   listContent: {

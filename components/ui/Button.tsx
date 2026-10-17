@@ -23,6 +23,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   type ViewStyle,
+  type StyleProp,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -44,7 +45,7 @@ interface ButtonProps {
   /** Icon to render before the label */
   iconLeft?: React.ReactNode;
   /** Override the container style */
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   /** Full-width by default; set to true to shrink-wrap */
   compact?: boolean;
 }

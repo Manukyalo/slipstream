@@ -34,6 +34,7 @@ import { Card } from '@/components/ui/Card';
 import { ListRow } from '@/components/ui/ListRow';
 import { Button } from '@/components/ui/Button';
 import { GoogleLogo } from '@/components/ui/GoogleLogo';
+import { ClusterGauge } from '@/components/ui/ClusterGauge';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useVehicles } from '@/hooks/useVehicles';
@@ -71,7 +72,7 @@ export default function SettingsScreen() {
     attachDrives,
   } = useVehicles();
   const { referralCode, totalReferrals, shareInvite, isLoading: isLoadingReferral } = useReferral();
-  const { speedUnit, setSpeedUnit } = usePreferences();
+  const { speedUnit, setSpeedUnit, currency, setCurrency, gaugeTheme, setGaugeTheme } = usePreferences();
   const { diagnostics, checkForUpdate, isChecking } = useOtaUpdates();
 
   // Modals state
@@ -129,6 +130,19 @@ export default function SettingsScreen() {
   const handleToggleUnits = async () => {
     const nextUnit: SpeedUnit = speedUnit === 'kmh' ? 'mph' : 'kmh';
     await setSpeedUnit(nextUnit);
+  };
+
+  const handleToggleCurrency = () => {
+    const currencies: ('KES' | 'USD' | 'EUR' | 'GBP')[] = ['KES', 'USD', 'EUR', 'GBP'];
+    Alert.alert(
+      'Select Currency',
+      'Choose your preferred currency for vehicle maintenance and expenses.',
+      currencies.map((c) => ({
+        text: c === currency ? `${c} (Active)` : c,
+        onPress: () => setCurrency(c),
+      })),
+      { cancelable: true },
+    );
   };
 
   const handleExportData = async () => {
@@ -392,7 +406,63 @@ export default function SettingsScreen() {
             rightValue={speedUnit === 'kmh' ? 'km/h' : 'mph'}
             chevron
             onPress={handleToggleUnits}
-            isLast
+          />
+          <ListRow
+            icon="gear"
+            iconColor="blue"
+            label="Currency"
+            sublabel="Currency for maintenance and upkeep expenses"
+            rightValue={currency}
+            chevron
+            onPress={handleToggleCurrency}
+          />
+          <View style={styles.gaugeStyleRow}>
+            <View style={styles.gaugeStyleTextGroup}>
+              <Text variant="body" color={Colors.text.primary} style={styles.gaugeStyleLabel}>
+                Gauge style
+              </Text>
+              <Text variant="label" color={Colors.text.tertiary} style={styles.gaugeSublabel}>
+                Colour theme for the telemetry cluster
+              </Text>
+            </View>
+            <View style={styles.segmentedControl}>
+              {(['slipstream', 'sport'] as const).map((t) => (
+                <Pressable
+                  key={t}
+                  style={[styles.segmentChip, gaugeTheme === t && styles.segmentChipActive]}
+                  onPress={() => setGaugeTheme(t)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: gaugeTheme === t }}
+                >
+                  <Text
+                    variant="label"
+                    color={gaugeTheme === t ? Colors.bg.base : Colors.text.secondary}
+                    style={styles.segmentChipText}
+                  >
+                    {t === 'slipstream' ? 'Slipstream' : 'Sport'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </Card>
+
+        {/* Live Preview Card */}
+        <Card style={styles.gaugePreviewCard}>
+          <View style={styles.gaugePreviewHeader}>
+            <Text variant="overline" color={Colors.text.tertiary} style={styles.gaugePreviewLabel}>
+              PREVIEW
+            </Text>
+            <Text variant="label" color={gaugeTheme === 'sport' ? Colors.semantic.danger : Colors.accent.cyan}>
+              {gaugeTheme === 'sport' ? 'Sport (151 km/h sample)' : 'Slipstream (151 km/h sample)'}
+            </Text>
+          </View>
+          <ClusterGauge
+            mode="compact"
+            speedKmh={151}
+            hasData
+            gpsStatus="locked"
+            style={styles.gaugePreviewCluster}
           />
         </Card>
       </View>
@@ -845,5 +915,67 @@ const styles = StyleSheet.create({
   },
   devTokensBtn: {
     marginTop: Spacing[1],
+  },
+  gaugeStyleRow: {
+    paddingVertical: Spacing[3],
+    paddingHorizontal: Spacing[4],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing[2],
+  },
+  gaugeStyleTextGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  gaugeStyleLabel: {
+    fontSize: 15,
+  },
+  gaugeSublabel: {
+    fontSize: 12,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface['2'],
+    borderRadius: Radius.button,
+    padding: 3,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  segmentChip: {
+    paddingVertical: Spacing[1],
+    paddingHorizontal: Spacing[3],
+    borderRadius: Radius.button - 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentChipActive: {
+    backgroundColor: Colors.text.primary,
+  },
+  segmentChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  gaugePreviewCard: {
+    backgroundColor: Colors.surface['1'],
+    padding: Spacing[3],
+    gap: Spacing[2],
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  gaugePreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: Spacing[1],
+  },
+  gaugePreviewLabel: {
+    letterSpacing: 1.2,
+    fontWeight: '700',
+  },
+  gaugePreviewCluster: {
+    width: '100%',
   },
 });
