@@ -21,7 +21,8 @@ import {
   Pressable,
   RefreshControl,
 } from 'react-native';
-import { router } from 'expo-router';
+import { type ErrorBoundaryProps, router } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Gradient, Radius, Spacing } from '@/constants/theme';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -302,6 +303,10 @@ const speedStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
 // ─────────────────────────────────────────────────────────────────────────────
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Profile" />;
+}
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();

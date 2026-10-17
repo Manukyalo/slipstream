@@ -24,11 +24,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Colors, FontFamily, Radius, Spacing, Typography } from '@/constants/theme';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Icon } from '@/components/ui/Icon';
 import { Text } from '@/components/ui/Text';
+import { Button } from '@/components/ui/Button';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import {
   createMaintenanceLog,
@@ -37,6 +38,37 @@ import {
   type CreateMaintenanceLogInput,
   type MaintenanceType,
 } from '@/services/maintenance';
+
+let cachedNativePicker: React.ComponentType<any> | null = null;
+let hasAttemptedNativePicker = false;
+
+function getNativeDateTimePicker(): React.ComponentType<any> | null {
+  if (hasAttemptedNativePicker) {
+    return cachedNativePicker;
+  }
+  hasAttemptedNativePicker = true;
+  try {
+    // Lazily require so TurboModuleRegistry.getEnforcing('RNCDatePicker') doesn't throw
+    // at top-level module load time on installed builds lacking the native module.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@react-native-community/datetimepicker');
+    cachedNativePicker = (mod && mod.default) ? mod.default : (mod || null);
+  } catch (err) {
+    console.warn('[AddMaintenanceModal] Native DateTimePicker not available in binary:', err);
+    cachedNativePicker = null;
+  }
+  return cachedNativePicker;
+}
+
+function NativeDateTimePicker(props: any) {
+  const comp = getNativeDateTimePicker();
+  if (!comp) return null;
+  return React.createElement(comp, props);
+}
+
+function isNativePickerAvailable(): boolean {
+  return getNativeDateTimePicker() !== null;
+}
 
 const MAINTENANCE_TYPES: MaintenanceType[] = [
   'oil_change',
@@ -100,6 +132,7 @@ export function AddMaintenanceModal({
   // Active date picker state
   const [activePickerField, setActivePickerField] = useState<'serviceDate' | 'nextDueDate' | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
+  const [fallbackDateText, setFallbackDateText] = useState<string>('');
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -148,6 +181,7 @@ export function AddMaintenanceModal({
     const currentVal = form[field];
     const initialDate = currentVal ? new Date(currentVal + 'T00:00:00') : new Date();
     setPickerDate(isNaN(initialDate.getTime()) ? new Date() : initialDate);
+    setFallbackDateText(currentVal || todayISO());
     setActivePickerField(field);
   };
 
@@ -513,7 +547,7 @@ export function AddMaintenanceModal({
         </KeyboardAvoidingView>
 
         {/* ── NATIVE DATE PICKER OVERLAY (iOS / Android) ── */}
-        {activePickerField && Platform.OS === 'ios' && (
+        {activePickerField && isNativePickerAvailable() && Platform.OS === 'ios' && (
           <Modal
             transparent
             animationType="fade"
@@ -539,12 +573,12 @@ export function AddMaintenanceModal({
                   </Pressable>
                 </View>
 
-                <DateTimePicker
+                <NativeDateTimePicker
                   value={pickerDate}
                   mode="date"
                   display="spinner"
                   themeVariant="dark"
-                  onChange={(e, date) => date && setPickerDate(date)}
+                  onChange={(e: any, date: Date | undefined) => date && setPickerDate(date)}
                   style={styles.iosPickerSpinner}
                 />
               </View>
@@ -552,13 +586,108 @@ export function AddMaintenanceModal({
           </Modal>
         )}
 
-        {activePickerField && Platform.OS === 'android' && (
-          <DateTimePicker
+        {activePickerField && isNativePickerAvailable() && Platform.OS === 'android' && (
+          <NativeDateTimePicker
             value={pickerDate}
             mode="date"
             display="default"
             onChange={onDateChange}
           />
+        )}
+
+        {/* ── FALLBACK DATE PICKER MODAL (When native module is absent) ── */}
+        {activePickerField && !isNativePickerAvailable() && (
+          <Modal
+            transparent
+            animationType="fade"
+            visible={Boolean(activePickerField)}
+            onRequestClose={() => setActivePickerField(null)}
+          >
+            <View style={styles.iosPickerOverlay}>
+              <Pressable style={styles.iosPickerBackdrop} onPress={() => setActivePickerField(null)} />
+              <View style={styles.fallbackModalCard}>
+                <View style={styles.fallbackModalHeader}>
+                  <Text variant="title" color={Colors.text.primary}>
+                    {activePickerField === 'serviceDate' ? 'Service Date' : 'Next Due Date'}
+                  </Text>
+                  <Text variant="label" color={Colors.text.tertiary}>
+                    Enter date in YYYY-MM-DD format
+                  </Text>
+                </View>
+
+                <View style={styles.presetChipRow}>
+                  <Pressable
+                    style={styles.presetChip}
+                    onPress={() => setFallbackDateText(todayISO())}
+                  >
+                    <Text variant="label" color={Colors.text.primary}>Today</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const d = new Date();
+                      d.setMonth(d.getMonth() + 3);
+                      setFallbackDateText(d.toISOString().split('T')[0]);
+                    }}
+                  >
+                    <Text variant="label" color={Colors.text.primary}>+3 Mo</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const d = new Date();
+                      d.setMonth(d.getMonth() + 6);
+                      setFallbackDateText(d.toISOString().split('T')[0]);
+                    }}
+                  >
+                    <Text variant="label" color={Colors.text.primary}>+6 Mo</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.presetChip}
+                    onPress={() => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear() + 1);
+                      setFallbackDateText(d.toISOString().split('T')[0]);
+                    }}
+                  >
+                    <Text variant="label" color={Colors.text.primary}>+1 Yr</Text>
+                  </Pressable>
+                </View>
+
+                <TextInput
+                  style={styles.fallbackDateInput}
+                  value={fallbackDateText}
+                  onChangeText={setFallbackDateText}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={Colors.text.tertiary}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
+                />
+
+                <View style={styles.fallbackActionRow}>
+                  <Button
+                    variant="ghost"
+                    onPress={() => setActivePickerField(null)}
+                    style={styles.fallbackBtn}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onPress={() => {
+                      if (activePickerField && fallbackDateText.trim()) {
+                        updateField(activePickerField, fallbackDateText.trim());
+                      }
+                      setActivePickerField(null);
+                    }}
+                    style={styles.fallbackBtn}
+                  >
+                    Set Date
+                  </Button>
+                </View>
+              </View>
+            </View>
+          </Modal>
         )}
       </ScreenContainer>
     </Modal>
@@ -753,5 +882,53 @@ const styles = StyleSheet.create({
   },
   iosPickerSpinner: {
     height: 200,
+  },
+  // ── Fallback Date Picker (No Native Module) ──
+  fallbackModalCard: {
+    backgroundColor: Colors.surface['2'],
+    borderRadius: Radius.card,
+    marginHorizontal: Spacing[4],
+    marginBottom: Spacing.section,
+    padding: Spacing[4],
+    gap: Spacing[3],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  fallbackModalHeader: {
+    gap: 4,
+  },
+  presetChipRow: {
+    flexDirection: 'row',
+    gap: Spacing[2],
+  },
+  presetChip: {
+    flex: 1,
+    backgroundColor: Colors.surface['3'],
+    paddingVertical: Spacing[2],
+    borderRadius: Radius.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  fallbackDateInput: {
+    height: 48,
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.button,
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    color: Colors.text.primary,
+    fontFamily: FontFamily.body,
+    fontSize: 16,
+    paddingHorizontal: Spacing[3],
+    letterSpacing: 1,
+  },
+  fallbackActionRow: {
+    flexDirection: 'row',
+    gap: Spacing[2],
+    marginTop: Spacing[1],
+  },
+  fallbackBtn: {
+    flex: 1,
   },
 });

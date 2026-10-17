@@ -22,7 +22,8 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { type ErrorBoundaryProps, useRouter } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Segmented } from '@/components/ui/Segmented';
@@ -48,6 +49,10 @@ import { toUserMessage } from '@/utils/toUserMessage';
 
 type FilterTag = 'all' | 'twisty' | 'scenic' | 'off_road' | 'tarmac' | 'distance';
 const RADIUS_OPTIONS = [25, 50, 100, 250] as const;
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Roads" />;
+}
 
 export default function RoadsScreen() {
   const router = useRouter();

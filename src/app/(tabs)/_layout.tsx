@@ -56,6 +56,7 @@ export default function TabLayout() {
         tabBarInactiveTintColor: Colors.text.tertiary,
         tabBarLabelStyle:     styles.tabLabel,
         tabBarItemStyle:      styles.tabItem,
+        sceneStyle:           { backgroundColor: Colors.bg.base },
       }}
     >
       {/* ── Visible tabs ── */}

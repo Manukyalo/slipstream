@@ -42,6 +42,12 @@ import { type GenerateRecapCardParams } from '@/services/shareCard';
 import { hasUserConsentedLocation, setUserLocationConsent } from '@/services/compliance';
 import { TripMetrics } from '@/utils/telemetry';
 import { toUserMessage } from '@/utils/toUserMessage';
+import { type ErrorBoundaryProps } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Track" />;
+}
 
 export default function TrackScreen() {
   const insets = useSafeAreaInsets();

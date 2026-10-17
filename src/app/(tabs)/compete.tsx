@@ -19,7 +19,14 @@ import DragRaceScreen from './drag-race';
 import TrackDayScreen from './track-day';
 import RankingsScreen from './rankings';
 
+import { type ErrorBoundaryProps } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
+
 const SEGMENTS = ['Drag', 'Circuit', 'Rankings'] as const;
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Compete" />;
+}
 
 export default function CompeteScreen() {
   const [active, setActive] = useState<number>(0);

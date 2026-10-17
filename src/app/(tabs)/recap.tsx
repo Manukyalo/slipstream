@@ -14,7 +14,8 @@ import {
   RefreshControl,
   Pressable,
 } from 'react-native';
-import { router } from 'expo-router';
+import { type ErrorBoundaryProps, router } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { Text } from '@/components/ui/Text';
@@ -193,6 +194,10 @@ const cardStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
 // ─────────────────────────────────────────────────────────────────────────────
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Recap" />;
+}
 
 export default function RecapScreen() {
   const { user, profile } = useAuth();

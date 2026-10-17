@@ -21,7 +21,8 @@ import {
   Switch,
   View,
 } from 'react-native';
-import { router } from 'expo-router';
+import { type ErrorBoundaryProps, router } from 'expo-router';
+import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
 import * as ImagePicker from 'expo-image-picker';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -59,6 +60,10 @@ import { DeleteAccountSheet } from '@/components/settings/DeleteAccountSheet';
 import { EditProfileModal } from '@/components/settings/EditProfileModal';
 import { MaintenanceLogScreen } from '@/components/maintenance/MaintenanceLogScreen';
 import type { Vehicle } from '@/types/database';
+
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <RouteErrorBoundary {...props} screenTitle="Settings" />;
+}
 
 export default function SettingsScreen() {
   const { user, profile, signOut, signInWithGoogle, signInWithApple, status } = useAuth();
