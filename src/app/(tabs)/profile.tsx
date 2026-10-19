@@ -16,6 +16,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Image,
   View,
   StyleSheet,
   Pressable,
@@ -37,8 +38,8 @@ import { Sparkline } from '@/components/stats/Sparkline';
 import { DrivingStyleCard } from '@/components/stats/DrivingStyleCard';
 import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVehicleContext } from '@/contexts/VehicleContext';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { useVehicles } from '@/hooks/useVehicles';
 import { toUserMessage } from '@/utils/toUserMessage';
 import {
   fetchUserPeriodStats,
@@ -78,9 +79,17 @@ interface ProfileHeaderProps {
   streakDays: number;
   vehicleName: string;
   country?: string;
+  avatarUrl?: string | null;
 }
 
-function ProfileHeader({ handle, level, streakDays, vehicleName, country }: ProfileHeaderProps) {
+function ProfileHeader({
+  handle,
+  level,
+  streakDays,
+  vehicleName,
+  country,
+  avatarUrl,
+}: ProfileHeaderProps) {
   const initial = handle.replace(/^@/, '').charAt(0).toUpperCase() || 'S';
   const locationLine = [country, vehicleName].filter(Boolean).join('  ·  ');
 
@@ -94,9 +103,13 @@ function ProfileHeader({ handle, level, streakDays, vehicleName, country }: Prof
         style={headerStyles.avatarRing}
       >
         <View style={headerStyles.avatarInner}>
-          <Text variant="display" color={Colors.accent.cyan} style={headerStyles.avatarInitial}>
-            {initial}
-          </Text>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={headerStyles.avatarImage} resizeMode="cover" />
+          ) : (
+            <Text variant="display" color={Colors.accent.cyan} style={headerStyles.avatarInitial}>
+              {initial}
+            </Text>
+          )}
         </View>
       </LinearGradient>
 
@@ -159,6 +172,11 @@ const headerStyles = StyleSheet.create({
     backgroundColor: Colors.bg.base,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitial: {
     fontSize: 30,
@@ -310,13 +328,23 @@ export function ErrorBoundary(props: ErrorBoundaryProps) {
 
 export default function ProfileScreen() {
   const { user, profile } = useAuth();
-  const { primaryVehicle } = useVehicles();
+  const { primaryVehicle, avatarSource } = useVehicleContext();
   const { convertDistanceKm, distanceUnitLabel } = usePreferences();
   const [periodIndex, setPeriodIndex] = useState(0);
   const [stats, setStats] = useState<PeriodStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
+
+  const avatarUrl = useMemo(() => {
+    if (avatarSource === 'car') {
+      return primaryVehicle?.photo_url ?? null;
+    }
+    if (avatarSource === 'custom') {
+      return profile?.avatar_url ?? null;
+    }
+    return null;
+  }, [avatarSource, primaryVehicle?.photo_url, profile?.avatar_url]);
 
   const period = PERIODS[periodIndex].value;
 
@@ -440,6 +468,7 @@ export default function ProfileScreen() {
         streakDays={stats?.streakDays ?? 0}
         vehicleName={vehicleLabel}
         country="Kenya"
+        avatarUrl={avatarUrl}
       />
 
       {/* Period Selector */}

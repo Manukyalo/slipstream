@@ -12,184 +12,24 @@ import {
   StyleSheet,
   FlatList,
   RefreshControl,
-  Pressable,
+  ScrollView,
 } from 'react-native';
 import { type ErrorBoundaryProps, router } from 'expo-router';
 import { RouteErrorBoundary } from '@/components/error/RouteErrorBoundary';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Spacing } from '@/constants/theme';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { Text } from '@/components/ui/Text';
-import { Icon } from '@/components/ui/Icon';
+import { FilterChip } from '@/components/ui/FilterChip';
 import { SkeletonCard } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ShareRecapModal } from '@/components/recap/ShareRecapModal';
+import { TripCard } from '@/components/recap/TripCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { useVehicles } from '@/hooks/useVehicles';
+import { useVehicleContext } from '@/contexts/VehicleContext';
 import { fetchRecentTrips } from '@/services/trips';
 import { toUserMessage } from '@/utils/toUserMessage';
 import type { Trip } from '@/types/database';
 import type { GenerateRecapCardParams } from '@/services/shareCard';
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m < 60) return `${m}m ${s}s`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return `${h}h ${rem}m`;
-}
-
-function formatDate(isoString: string): string {
-  const d = new Date(isoString);
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-interface TripCardProps {
-  trip: Trip;
-  onShare: () => void;
-}
-
-function TripCard({ trip, onShare }: TripCardProps) {
-  const distKm = (Number(trip.distance_m) / 1000).toFixed(2);
-  const topSpeed = Math.round(Number(trip.top_speed));
-  const avgSpeed = Math.round(Number(trip.avg_speed));
-
-  return (
-    <View style={cardStyles.card}>
-      {/* Header */}
-      <View style={cardStyles.header}>
-        <View style={cardStyles.dateWrap}>
-          <Icon name="flag" size={14} color={Colors.text.tertiary} />
-          <Text variant="label" color={Colors.text.primary}>
-            {formatDate(trip.started_at)}
-          </Text>
-        </View>
-        <View style={cardStyles.durationBadge}>
-          <Text variant="overline" color={Colors.accent.cyan}>
-            {formatDuration(trip.duration_s)}
-          </Text>
-        </View>
-      </View>
-
-      {/* Metrics */}
-      <View style={cardStyles.metrics}>
-        <View style={cardStyles.metricItem}>
-          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
-            {distKm}
-          </Text>
-          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
-            KM
-          </Text>
-        </View>
-        <View style={cardStyles.divider} />
-        <View style={cardStyles.metricItem}>
-          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
-            {topSpeed}
-          </Text>
-          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
-            PEAK KM/H
-          </Text>
-        </View>
-        <View style={cardStyles.divider} />
-        <View style={cardStyles.metricItem}>
-          <Text variant="metricL" color={Colors.text.primary} tabular style={cardStyles.metricValue}>
-            {avgSpeed}
-          </Text>
-          <Text variant="overline" color={Colors.text.tertiary} style={cardStyles.metricUnit}>
-            AVG KM/H
-          </Text>
-        </View>
-      </View>
-
-      {/* Share button */}
-      <Pressable
-        style={({ pressed }) => [cardStyles.shareBtn, pressed && cardStyles.btnPressed]}
-        onPress={onShare}
-      >
-        <Icon name="share" size={14} color={Colors.accent.cyan} />
-        <Text variant="overline" color={Colors.accent.cyan}>
-          SHARE STORY CARD
-        </Text>
-      </Pressable>
-    </View>
-  );
-}
-
-const cardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: Colors.surface['1'],
-    borderRadius: Radius.card,
-    borderWidth: 1,
-    borderColor: Colors.hairline,
-    padding: Spacing.card,
-    gap: Spacing.gap,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dateWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing[1],
-  },
-  durationBadge: {
-    backgroundColor: 'rgba(34,211,238,0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: 'rgba(34,211,238,0.25)',
-  },
-  metrics: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface['2'],
-    borderRadius: Radius.iconChip,
-    paddingVertical: Spacing[3],
-    paddingHorizontal: Spacing[2],
-  },
-  metricItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 3,
-  },
-  metricValue: {
-    fontSize: 26,
-    lineHeight: 30,
-  },
-  metricUnit: {
-    marginTop: 2,
-  },
-  divider: {
-    width: 1,
-    height: 32,
-    backgroundColor: Colors.hairline,
-  },
-  shareBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing[2],
-    borderWidth: 1,
-    borderColor: Colors.hairline,
-    borderRadius: Radius.button,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(34,211,238,0.06)',
-  },
-  btnPressed: {
-    opacity: 0.75,
-  },
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -201,47 +41,53 @@ export function ErrorBoundary(props: ErrorBoundaryProps) {
 
 export default function RecapScreen() {
   const { user, profile } = useAuth();
-  const { primaryVehicle } = useVehicles();
+  const { vehicles, primaryVehicle } = useVehicleContext();
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    fetchRecentTrips(50)
-      .then((data) => {
-        if (active) {
-          setTrips(data);
-          setErrorMsg(null);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setErrorMsg(toUserMessage(err));
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
+  const loadTrips = useCallback(async (vId?: string | null) => {
     try {
-      const data = await fetchRecentTrips(50);
+      const data = await fetchRecentTrips(50, vId);
       setTrips(data);
       setErrorMsg(null);
     } catch (err) {
       setErrorMsg(toUserMessage(err));
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchRecentTrips(50, selectedVehicleId)
+      .then((data) => {
+        if (!active) return;
+        setTrips(data);
+        setErrorMsg(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setErrorMsg(toUserMessage(err));
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+        setRefreshing(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedVehicleId]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadTrips(selectedVehicleId);
+  }, [selectedVehicleId, loadTrips]);
 
   const handle = profile?.display_name || user?.email?.split('@')[0] || 'pilot';
   const vehicleLabel = primaryVehicle
@@ -250,6 +96,30 @@ export default function RecapScreen() {
 
   return (
     <ScreenContainer title="Recap">
+      {/* Vehicle Filter Bar */}
+      {vehicles.length > 0 && (
+        <View style={styles.filterBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterContent}
+          >
+            <FilterChip
+              label="All Cars"
+              active={selectedVehicleId === null}
+              onPress={() => setSelectedVehicleId(null)}
+            />
+            {vehicles.map((v) => (
+              <FilterChip
+                key={v.id}
+                label={v.nickname || `${v.make} ${v.model}`}
+                active={selectedVehicleId === v.id}
+                onPress={() => setSelectedVehicleId(v.id)}
+              />
+            ))}
+          </ScrollView>
+        </View>
+      )}
       {loading ? (
         <View style={styles.skeletonWrap}>
           {[0, 1, 2, 3].map((i) => (
@@ -317,6 +187,15 @@ export default function RecapScreen() {
 }
 
 const styles = StyleSheet.create({
+  filterBar: {
+    paddingVertical: Spacing[2],
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
+  },
+  filterContent: {
+    paddingHorizontal: Spacing.screen,
+    gap: Spacing[2],
+  },
   skeletonWrap: {
     paddingHorizontal: Spacing.screen,
     paddingTop: Spacing.gap,

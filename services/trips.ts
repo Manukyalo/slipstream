@@ -9,12 +9,18 @@
 import { supabase } from '@/lib/supabase';
 import type { Json, Trip } from '@/types/database';
 
-export async function fetchRecentTrips(limit = 50): Promise<Trip[]> {
-  const { data, error } = await supabase
+export async function fetchRecentTrips(limit = 50, vehicleId?: string | null): Promise<Trip[]> {
+  let query = supabase
     .from('trips')
     .select('*')
     .order('started_at', { ascending: false })
     .limit(limit);
+
+  if (vehicleId) {
+    query = query.eq('vehicle_id', vehicleId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.warn('[TripsService] Failed to fetch trips:', error.message);
@@ -35,6 +41,14 @@ export interface InsertTripPayload {
   speed_samples: Json;
   started_at: string;
   ended_at: string;
+  moving_time_s?: number;
+  pit_stop_count?: number;
+  pit_stop_total_s?: number;
+  pit_stops?: Json;
+  start_latlng?: Json;
+  end_latlng?: Json;
+  snapshot_url?: string | null;
+  route_points?: Json;
 }
 
 export async function saveTrip(payload: InsertTripPayload): Promise<void> {
@@ -69,3 +83,46 @@ export async function saveTrip(payload: InsertTripPayload): Promise<void> {
     }
   }
 }
+
+export async function updateTripSnapshot(tripIdOrClientId: string, snapshotUrl: string): Promise<void> {
+  const { error } = await supabase
+    .from('trips')
+    .update({ snapshot_url: snapshotUrl })
+    .or(`id.eq.${tripIdOrClientId},client_id.eq.${tripIdOrClientId}`);
+
+  if (error) {
+    console.warn('[TripsService] Failed to update snapshot URL:', error.message);
+    throw new Error(`Failed to update snapshot: ${error.message}`);
+  }
+}
+
+export async function uploadTripSnapshotImage(
+  userId: string,
+  tripIdOrClientId: string,
+  localUri: string,
+): Promise<string> {
+  const res = await fetch(localUri);
+  const buffer = await res.arrayBuffer();
+  const filePath = `${userId}/${tripIdOrClientId}.jpg`;
+
+  const { error } = await supabase.storage
+    .from('trip-snapshots')
+    .upload(filePath, buffer, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+
+  if (error) {
+    console.warn('[TripsService] Snapshot upload error:', error.message);
+    throw new Error(`Snapshot upload failed: ${error.message}`);
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('trip-snapshots')
+    .getPublicUrl(filePath);
+
+  const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+  await updateTripSnapshot(tripIdOrClientId, publicUrl);
+  return publicUrl;
+}
+

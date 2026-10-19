@@ -74,6 +74,7 @@ import {
   CircleNotch,
   BatteryHigh,
   ClipboardText,
+  Sparkle,
 } from 'phosphor-react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,6 +158,7 @@ const ICON_MAP = {
   'circle-notch': CircleNotch,
   'battery-high': BatteryHigh,
   'clipboard-text': ClipboardText,
+  sparkle:        Sparkle,
 } as const satisfies Record<string, React.ComponentType<{ size?: number; color?: string; weight?: IconWeight; style?: object }>>;
 
 // ─────────────────────────────────────────────────────────────────────────────

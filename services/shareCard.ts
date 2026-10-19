@@ -9,6 +9,7 @@
 
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import type { StoryCardData } from '@/components/recap/StoryCardView';
 
 export interface GenerateRecapCardParams {
@@ -25,6 +26,8 @@ export interface GenerateRecapCardParams {
   durationSeconds?: number;
   referralCode?: string;
   dateStr?: string;
+  hideStartEnd?: boolean;
+  snapshotUrl?: string | null;
 }
 
 export interface ShareCardResult {
@@ -33,11 +36,17 @@ export interface ShareCardResult {
   fileUri?: string;
 }
 
+export interface CaptureShareOptions {
+  hideStartEnd?: boolean;
+}
+
 /**
- * Captures a rendered view ref to a high-resolution PNG and invokes the OS Share Sheet.
+ * Captures a rendered view ref to a high-resolution PNG, optionally processes with
+ * image-manipulator for privacy masking, and invokes the OS Share Sheet.
  */
 export async function captureAndShareStoryCard(
   viewRef: React.RefObject<unknown>,
+  options?: CaptureShareOptions,
 ): Promise<ShareCardResult> {
   try {
     if (!viewRef.current) {
@@ -48,13 +57,27 @@ export async function captureAndShareStoryCard(
     }
 
     // Capture offscreen view at 1080x1920
-    const uri = await captureRef(viewRef, {
+    let uri = await captureRef(viewRef, {
       format: 'png',
       quality: 1,
       width: 1080,
       height: 1920,
       result: 'tmpfile',
     });
+
+    // If privacy masking is requested, run expo-image-manipulator to re-process and ensure clean metadata
+    if (options?.hideStartEnd) {
+      try {
+        const result = await manipulateAsync(
+          uri,
+          [],
+          { format: SaveFormat.PNG, compress: 1 },
+        );
+        uri = result.uri;
+      } catch (err) {
+        console.warn('[ShareCard] Image manipulation warning:', err);
+      }
+    }
 
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
@@ -112,5 +135,7 @@ export function buildStoryCardData(
     durationSeconds: params.durationSeconds ?? 0,
     dateStr: params.dateStr,
     referralCode: params.referralCode,
+    hideStartEnd: params.hideStartEnd ?? true,
+    snapshotUrl: params.snapshotUrl,
   };
 }

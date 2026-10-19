@@ -1,10 +1,12 @@
 /**
- * TrackDriveButton — Primary Action & Hold-to-Stop Control
+ * TrackDriveButton — Primary Action, Pit Stop & Hold-to-Stop Controls
  *
- * Requirements:
+ * States:
  *  - Idle: Gradient cyan→blue, height 56, haptic on press ("Start drive")
- *  - Recording: Becomes "Hold to stop" with a red progress ring/bar filling over 1.5s
- *  - Haptics on press-in and hold completion
+ *  - GPS Waiting: "Acquiring GPS lock (<30m)..." state while waiting for initial fix
+ *  - Recording: Pit Stop button (amber pause) beside "Hold to stop" (red progress fill over 1.5s)
+ *  - Pit-Stopped: "Continue drive" (gradient play) beside "Hold to stop"
+ *  - Saving: "Saving trip telemetry..." with spinner
  */
 
 import React, { useRef, useState, useMemo } from 'react';
@@ -24,18 +26,26 @@ import { Icon } from '@/components/ui/Icon';
 
 interface TrackDriveButtonProps {
   isTracking: boolean;
+  isPitStopped?: boolean;
+  isGpsWaiting?: boolean;
   isSaving?: boolean;
   onStart: () => void;
   onStop: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
 }
 
 const HOLD_DURATION_MS = 1500;
 
 export function TrackDriveButton({
   isTracking,
+  isPitStopped = false,
+  isGpsWaiting = false,
   isSaving = false,
   onStart,
   onStop,
+  onPause,
+  onResume,
 }: TrackDriveButtonProps) {
   const { gaugeTheme } = usePreferences();
   const gaugeThemeTokens = GaugeThemes[gaugeTheme];
@@ -44,9 +54,21 @@ export function TrackDriveButton({
   const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleStartPress = async () => {
-    if (isSaving) return;
+    if (isSaving || isGpsWaiting) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onStart();
+  };
+
+  const handlePausePress = async () => {
+    if (isSaving) return;
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onPause?.();
+  };
+
+  const handleResumePress = async () => {
+    if (isSaving) return;
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onResume?.();
   };
 
   const handlePressIn = () => {
@@ -83,7 +105,6 @@ export function TrackDriveButton({
     }).start();
   };
 
-  // Active recording: Hold to stop progress animation
   const progressWidth = useMemo(
     () =>
       holdProgress.interpolate({
@@ -98,6 +119,15 @@ export function TrackDriveButton({
       <View style={[styles.base, styles.savingBtn]}>
         <ActivityIndicator color={Colors.accent.cyan} size="small" />
         <Text style={styles.savingText}>Saving trip telemetry...</Text>
+      </View>
+    );
+  }
+
+  if (isGpsWaiting) {
+    return (
+      <View style={[styles.base, styles.gpsWaitBtn]}>
+        <ActivityIndicator color={Colors.semantic.warning} size="small" />
+        <Text style={styles.gpsWaitText}>Acquiring GPS fix (accuracy &lt; 30m)...</Text>
       </View>
     );
   }
@@ -124,32 +154,63 @@ export function TrackDriveButton({
   }
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[styles.base, styles.stopBtnContainer]}
-    >
-      {/* Animated red progress fill */}
-      <Animated.View
-        style={[
-          styles.progressFill,
-          {
-            width: progressWidth,
-            backgroundColor: holding ? 'rgba(244,63,94,0.35)' : 'transparent',
-          },
-        ]}
-      />
+    <View style={styles.trackingRow}>
+      {/* Pit Stop / Continue button */}
+      {!isPitStopped ? (
+        <TouchableOpacity
+          onPress={handlePausePress}
+          activeOpacity={0.8}
+          style={styles.pitStopBtn}
+        >
+          <Icon name="pause" size={18} color={Colors.semantic.warning} weight="fill" />
+          <Text style={styles.pitStopBtnLabel}>Pit stop</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          onPress={handleResumePress}
+          activeOpacity={0.85}
+          style={styles.continueBtn}
+        >
+          <LinearGradient
+            colors={gaugeThemeTokens.ctaGradient as [string, string]}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.contentRow}>
+            <Icon name="play" size={18} color={Colors.bg.base} weight="fill" />
+            <Text style={styles.continueBtnLabel}>Continue</Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
-      <View style={styles.contentRow}>
-        <View style={styles.stopIconBox}>
-          <Icon name="stop" size={16} color={Colors.semantic.danger} weight="fill" />
+      {/* Hold-to-stop control */}
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[styles.base, styles.stopBtnContainer]}
+      >
+        <Animated.View
+          style={[
+            styles.progressFill,
+            {
+              width: progressWidth,
+              backgroundColor: holding ? 'rgba(244,63,94,0.35)' : 'transparent',
+            },
+          ]}
+        />
+
+        <View style={styles.contentRow}>
+          <View style={styles.stopIconBox}>
+            <Icon name="stop" size={15} color={Colors.semantic.danger} weight="fill" />
+          </View>
+          <Text style={styles.stopLabel} numberOfLines={1}>
+            {holding ? 'Hold to finish...' : 'Hold to stop'}
+          </Text>
         </View>
-        <Text style={styles.stopLabel}>
-          {holding ? 'Hold to finish drive...' : 'Hold to finish drive'}
-        </Text>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -162,10 +223,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  contentRow: {
+  trackingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    alignSelf: 'stretch',
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     zIndex: 2,
   },
   startLabel: {
@@ -175,7 +242,42 @@ const styles = StyleSheet.create({
     color: Colors.bg.base,
     letterSpacing: 0.3,
   },
+  pitStopBtn: {
+    height: 56,
+    paddingHorizontal: 16,
+    borderRadius: Radius.button,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(245, 158, 11, 0.45)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  pitStopBtnLabel: {
+    fontFamily: FontFamily.heading,
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.semantic.warning,
+    letterSpacing: 0.2,
+  },
+  continueBtn: {
+    flex: 1.1,
+    height: 56,
+    borderRadius: Radius.button,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueBtnLabel: {
+    fontFamily: FontFamily.display,
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.bg.base,
+    letterSpacing: 0.3,
+  },
   stopBtnContainer: {
+    flex: 1,
     backgroundColor: Colors.surface['2'],
     borderWidth: 1.5,
     borderColor: 'rgba(244,63,94,0.4)',
@@ -188,16 +290,16 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   stopIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: 'rgba(244,63,94,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   stopLabel: {
     fontFamily: FontFamily.heading,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.text.primary,
     letterSpacing: 0.2,
   },
@@ -211,5 +313,16 @@ const styles = StyleSheet.create({
   savingText: {
     ...Typography.label,
     color: Colors.accent.cyan,
+  },
+  gpsWaitBtn: {
+    backgroundColor: Colors.surface['2'],
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  gpsWaitText: {
+    ...Typography.label,
+    color: Colors.semantic.warning,
   },
 });

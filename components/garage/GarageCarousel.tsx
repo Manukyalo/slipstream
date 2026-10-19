@@ -3,8 +3,9 @@
  *
  * Requirements:
  *  - Photo, Make, Model, Year, Odometer
- *  - "Attach drives" action
- *  - Empty state with IconChip and "Add your first car" (ZERO emojis)
+ *  - Full-width hero photo with bottom gradient overlay
+ *  - Fallback showing make & model on surface.2 (never an empty box)
+ *  - "Make primary", "Edit", "Attach drives", and "Logbook" (wrench icon)
  *  - Tabular figures for numbers, Space Grotesk headings, theme tokens
  */
 
@@ -19,6 +20,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { Card } from '@/components/ui/Card';
 import { SkeletonCard } from '@/components/ui/Skeleton';
@@ -39,6 +41,7 @@ interface GarageCarouselProps {
   onAttachDrives: (vehicle: Vehicle) => void;
   onSetPrimary: (vehicleId: string) => void;
   onPhotoPress: (vehicleId: string) => void;
+  onEditCar?: (vehicle: Vehicle) => void;
   onMaintenancePress: (vehicleId: string) => void;
   onDeleteCar?: (vehicleId: string) => void;
 }
@@ -50,6 +53,7 @@ export function GarageCarousel({
   onAttachDrives,
   onSetPrimary,
   onPhotoPress,
+  onEditCar,
   onMaintenancePress,
   onDeleteCar,
 }: GarageCarouselProps) {
@@ -60,20 +64,19 @@ export function GarageCarousel({
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const index = Math.round(offsetX / (CARD_WIDTH + Spacing.gap));
-    if (index !== activeIndex && index >= 0 && index < vehicles.length) {
-      setActiveIndex(index);
-    }
+    setActiveIndex(index);
   };
 
   if (isLoading) {
     return (
-      <Card style={styles.loadingCard}>
-        <SkeletonCard />
-      </Card>
+      <View style={styles.container}>
+        <Card style={styles.loadingCard}>
+          <SkeletonCard />
+        </Card>
+      </View>
     );
   }
 
-  // Empty garage state
   if (vehicles.length === 0) {
     return (
       <Card style={styles.emptyCard}>
@@ -87,7 +90,11 @@ export function GarageCarousel({
               Add your car to track performance benchmarks and attach drives to your build.
             </Text>
           </View>
-          <Button variant="secondary" onPress={onAddCar} iconLeft={<Icon name="plus" size={18} color={Colors.accent.cyan} />}>
+          <Button
+            variant="secondary"
+            onPress={onAddCar}
+            iconLeft={<Icon name="plus" size={18} color={Colors.accent.cyan} />}
+          >
             Add your first car
           </Button>
         </View>
@@ -112,27 +119,36 @@ export function GarageCarousel({
           const odometerDisplay = formatOdometer(v.odometer ?? 0);
           return (
             <Card key={v.id} style={[styles.vehicleCard, { width: CARD_WIDTH }]}>
-              {/* Photo Area */}
+              {/* Photo Area Hero */}
               <Pressable
                 style={styles.photoContainer}
-                onPress={() => onPhotoPress(v.id)}
+                onPress={() => (onEditCar ? onEditCar(v) : onPhotoPress(v.id))}
               >
                 {v.photo_url ? (
                   <Image source={{ uri: v.photo_url }} style={styles.vehicleImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.photoFallback}>
-                    <Icon name="car" size={36} color={Colors.accent.cyan} />
+                    <Icon name="car" size={44} color={Colors.accent.cyan} weight="duotone" />
+                    <Text variant="heading" color={Colors.text.primary} style={styles.fallbackCarName}>
+                      {v.year ? `${v.year} ` : ''}{v.make} {v.model}
+                    </Text>
                     <Text variant="label" color={Colors.text.tertiary}>
                       Tap to add photo
                     </Text>
                   </View>
                 )}
 
-                {/* Primary Chip */}
+                {/* Bottom gradient overlay */}
+                <LinearGradient
+                  colors={['transparent', 'rgba(14, 19, 27, 0.4)', Colors.surface['1']] as [string, string, string]}
+                  style={styles.photoGradientOverlay}
+                />
+
+                {/* Primary Badge or Make Primary Button */}
                 {v.is_primary ? (
                   <View style={styles.primaryBadge}>
-                    <Icon name="seal-check" size={14} color="#05070D" weight="fill" />
-                    <Text variant="overline" color="#05070D" style={styles.primaryBadgeText}>
+                    <Icon name="seal-check" size={14} color={Colors.text.inverse} weight="fill" />
+                    <Text variant="overline" color={Colors.text.inverse} style={styles.primaryBadgeText}>
                       PRIMARY
                     </Text>
                   </View>
@@ -142,8 +158,9 @@ export function GarageCarousel({
                     onPress={() => onSetPrimary(v.id)}
                     hitSlop={8}
                   >
+                    <Icon name="seal-check" size={13} color={Colors.accent.cyan} />
                     <Text variant="label" color={Colors.text.primary} style={styles.setPrimaryText}>
-                      Set Primary
+                      Make primary
                     </Text>
                   </Pressable>
                 )}
@@ -175,11 +192,23 @@ export function GarageCarousel({
 
               {/* Action Buttons Row */}
               <View style={styles.actionRow}>
+                {onEditCar && (
+                  <Pressable
+                    style={({ pressed }) => [styles.actionPill, pressed && styles.pillPressed]}
+                    onPress={() => onEditCar(v)}
+                  >
+                    <Icon name="pencil" size={15} color={Colors.text.secondary} />
+                    <Text variant="label" color={Colors.text.primary} style={styles.actionPillText}>
+                      Edit
+                    </Text>
+                  </Pressable>
+                )}
+
                 <Pressable
                   style={({ pressed }) => [styles.actionPill, pressed && styles.pillPressed]}
                   onPress={() => onAttachDrives(v)}
                 >
-                  <Icon name="path" size={16} color={Colors.accent.cyan} />
+                  <Icon name="path" size={15} color={Colors.accent.cyan} />
                   <Text variant="label" color={Colors.text.primary} style={styles.actionPillText}>
                     Attach drives
                   </Text>
@@ -189,7 +218,7 @@ export function GarageCarousel({
                   style={({ pressed }) => [styles.actionPill, pressed && styles.pillPressed]}
                   onPress={() => onMaintenancePress(v.id)}
                 >
-                  <Icon name="gear" size={16} color={Colors.text.secondary} />
+                  <Icon name="wrench" size={15} color={Colors.text.secondary} />
                   <Text variant="label" color={Colors.text.secondary} style={styles.actionPillText}>
                     Logbook
                   </Text>
@@ -201,7 +230,7 @@ export function GarageCarousel({
                     onPress={() => onDeleteCar(v.id)}
                     hitSlop={8}
                   >
-                    <Icon name="trash" size={16} color={Colors.semantic.danger} />
+                    <Icon name="trash" size={15} color={Colors.semantic.danger} />
                   </Pressable>
                 )}
               </View>
@@ -237,10 +266,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  loadingPlaceholder: {
-    alignItems: 'center',
-    gap: Spacing[2],
-  },
   emptyCard: {
     padding: Spacing.card,
   },
@@ -268,7 +293,7 @@ const styles = StyleSheet.create({
   },
   photoContainer: {
     width: '100%',
-    height: 150,
+    height: 220,
     backgroundColor: Colors.surface['2'],
     position: 'relative',
     overflow: 'hidden',
@@ -282,6 +307,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing[1],
+    paddingHorizontal: Spacing.screen,
+  },
+  fallbackCarName: {
+    textAlign: 'center',
+    marginTop: Spacing[1],
+  },
+  photoGradientOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 80,
   },
   primaryBadge: {
     position: 'absolute',
@@ -296,7 +333,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   primaryBadgeText: {
-    fontWeight: '700',
+    fontFamily: FontFamily.heading,
     fontSize: 10,
     letterSpacing: 0.5,
   },
@@ -304,12 +341,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: Spacing[3],
     left: Spacing[3],
-    backgroundColor: 'rgba(5, 7, 13, 0.75)',
-    paddingVertical: 4,
+    backgroundColor: 'rgba(5, 7, 13, 0.85)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
     paddingHorizontal: 10,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: Colors.hairline,
   },
   setPrimaryText: {
     fontSize: 12,
@@ -351,13 +391,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing[2],
+    gap: Spacing[1],
     backgroundColor: Colors.surface['2'],
     paddingVertical: Spacing[2],
-    paddingHorizontal: Spacing[3],
+    paddingHorizontal: Spacing[2],
     borderRadius: Radius.button,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
+    borderColor: Colors.hairline,
   },
   deletePill: {
     padding: Spacing[2],
@@ -369,7 +409,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(244, 63, 94, 0.2)',
   },
   actionPillText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   pillPressed: {

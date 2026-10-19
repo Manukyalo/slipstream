@@ -202,48 +202,81 @@ export async function deleteVehicle(userId: string, vehicleId: string): Promise<
 }
 
 /**
+ * Helper to derive thumbnail URL from a vehicle photo URL.
+ */
+export function getVehicleThumbnailUrl(photoUrl: string | null | undefined): string | null {
+  if (!photoUrl) return null;
+  if (photoUrl.includes('_thumb.jpg')) return photoUrl;
+  return photoUrl.replace('.jpg', '_thumb.jpg');
+}
+
+/**
  * Client-side resize and compression before uploading to Supabase Storage.
- * Max width 1024px, JPEG 80% compression.
- * Path: vehicle-photos/{userId}/{vehicleId}.jpg
+ * Resizes main photo to 1280px wide (JPEG 85%) and thumbnail to 256px wide (JPEG 80%).
+ * Paths:
+ *   vehicle-photos/{userId}/{vehicleId}.jpg
+ *   vehicle-photos/{userId}/{vehicleId}_thumb.jpg
  */
 export async function uploadVehiclePhoto(
   userId: string,
   vehicleId: string,
   localUri: string,
 ): Promise<string> {
-  // 1. Client-side resize and compression
-  const manipulated = await manipulateAsync(
+  // 1. Client-side resize for main hero photo (1280px max width)
+  const mainManipulated = await manipulateAsync(
     localUri,
-    [{ resize: { width: 1024 } }],
+    [{ resize: { width: 1280 } }],
+    { compress: 0.85, format: SaveFormat.JPEG },
+  );
+
+  // 2. Client-side resize for avatar / switcher thumbnail (256px max width)
+  const thumbManipulated = await manipulateAsync(
+    localUri,
+    [{ resize: { width: 256 } }],
     { compress: 0.8, format: SaveFormat.JPEG },
   );
 
-  // 2. Read as array buffer for reliable React Native binary upload
-  const response = await fetch(manipulated.uri);
-  const arrayBuffer = await response.arrayBuffer();
+  // 3. Convert both to binary array buffers
+  const [mainRes, thumbRes] = await Promise.all([
+    fetch(mainManipulated.uri),
+    fetch(thumbManipulated.uri),
+  ]);
+  const [mainBuffer, thumbBuffer] = await Promise.all([
+    mainRes.arrayBuffer(),
+    thumbRes.arrayBuffer(),
+  ]);
 
-  // 3. Upload to Supabase Storage bucket scoped to user folder
-  const storagePath = `${userId}/${vehicleId}.jpg`;
-  const { error: uploadError } = await supabase.storage
-    .from('vehicle-photos')
-    .upload(storagePath, arrayBuffer, {
+  // 4. Upload both to Supabase Storage bucket
+  const mainPath = `${userId}/${vehicleId}.jpg`;
+  const thumbPath = `${userId}/${vehicleId}_thumb.jpg`;
+
+  const [{ error: mainError }, { error: thumbError }] = await Promise.all([
+    supabase.storage.from('vehicle-photos').upload(mainPath, mainBuffer, {
       contentType: 'image/jpeg',
       upsert: true,
-    });
+    }),
+    supabase.storage.from('vehicle-photos').upload(thumbPath, thumbBuffer, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    }),
+  ]);
 
-  if (uploadError) {
-    console.error('[VehicleService] Photo upload failed:', uploadError.message);
-    throw new Error(`Photo upload failed: ${uploadError.message}`);
+  if (mainError) {
+    console.error('[VehicleService] Main photo upload failed:', mainError.message);
+    throw new Error(`Photo upload failed: ${mainError.message}`);
+  }
+  if (thumbError) {
+    console.warn('[VehicleService] Thumbnail upload warning:', thumbError.message);
   }
 
-  // 4. Retrieve public URL with timestamp cache buster
+  // 5. Retrieve public URL with timestamp cache buster
   const { data: urlData } = supabase.storage
     .from('vehicle-photos')
-    .getPublicUrl(storagePath);
+    .getPublicUrl(mainPath);
 
   const photoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-  // 5. Update vehicle record with new photo_url
+  // 6. Update vehicle record with new photo_url
   const { error: updateError } = await supabase
     .from('vehicles')
     .update({ photo_url: photoUrl })
@@ -256,6 +289,64 @@ export async function uploadVehiclePhoto(
   }
 
   return photoUrl;
+}
+
+/**
+ * Update general vehicle details (nickname, odometer, make, model, year).
+ */
+export async function updateVehicle(
+  userId: string,
+  vehicleId: string,
+  updates: Partial<{
+    nickname: string | null;
+    odometer: number;
+    make: string;
+    model: string;
+    year: number;
+  }>,
+): Promise<void> {
+  const payload: Record<string, unknown> = {};
+  if (updates.nickname !== undefined) payload.nickname = updates.nickname?.trim() || null;
+  if (updates.odometer !== undefined) payload.odometer = Math.max(0, Math.round(updates.odometer));
+  if (updates.make !== undefined) payload.make = updates.make.trim();
+  if (updates.model !== undefined) payload.model = updates.model.trim();
+  if (updates.year !== undefined) payload.year = updates.year;
+
+  if (Object.keys(payload).length === 0) return;
+
+  const { error } = await supabase
+    .from('vehicles')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .update(payload as any)
+    .eq('id', vehicleId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error(`[VehicleService] Failed to update vehicle ${vehicleId}:`, error.message);
+    throw new Error(`Failed to update vehicle: ${error.message}`);
+  }
+}
+
+/**
+ * Move all trips from one vehicle to another via database RPC.
+ */
+export async function moveTripsToVehicle(
+  fromVehicleId: string,
+  toVehicleId: string,
+): Promise<number> {
+  // RPC is a raw SQL function not yet in the generated schema — bypass type checking
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc('move_trips_to_vehicle', {
+    p_from_vehicle_id: fromVehicleId,
+    p_to_vehicle_id: toVehicleId,
+  });
+
+  if (error) {
+    console.error('[VehicleService] Failed to move trips:', error.message);
+    throw new Error(`Failed to move drives: ${error.message}`);
+  }
+
+  return (data as number) ?? 0;
 }
 
 /**

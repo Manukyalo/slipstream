@@ -17,18 +17,22 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
+  Pressable,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTracking } from '@/contexts/TrackingContext';
-import { useVehicles } from '@/hooks/useVehicles';
+import { useVehicleContext } from '@/contexts/VehicleContext';
 import { useOfflineMap } from '@/hooks/useOfflineMap';
 import { useHazardAlerts } from '@/hooks/useHazardAlerts';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
 import { ClusterGauge } from '@/components/ui/ClusterGauge';
 import { TrackTopPill } from '@/components/tracking/TrackTopPill';
 import { TrackDriveButton } from '@/components/tracking/TrackDriveButton';
+import { PitStopControls } from '@/components/tracking/PitStopControls';
+import { TripSummarySheet } from '@/components/recap/TripSummarySheet';
+import { VehicleSwitcherSheet } from '@/components/tracking/VehicleSwitcherSheet';
 import { IconChip } from '@/components/ui/IconChip';
 import { Icon } from '@/components/ui/Icon';
 import { Text } from '@/components/ui/Text';
@@ -53,21 +57,31 @@ export default function TrackScreen() {
   const insets = useSafeAreaInsets();
   const {
     isTracking,
+    isPitStopped,
+    isSaving,
+    isGpsWaiting,
     currentSpeedKmh,
     elapsedSeconds,
+    pitStopElapsedSeconds,
     distanceMeters,
     currentCoords,
     gpsAccuracy,
     heading,
+    startCoords,
+    pitStops,
+    currentPitStopTag,
     routeGeoJson,
-    isSaving,
     startTracking,
     stopTracking,
+    pauseTracking,
+    resumeTracking,
+    setCurrentPitStopTag,
     permissionGranted,
     requestPermissions,
   } = useTracking();
 
-  const { primaryVehicle } = useVehicles();
+  const { primaryVehicle } = useVehicleContext();
+  const [vehicleSwitcherVisible, setVehicleSwitcherVisible] = useState(false);
   const { downloadState, downloadCurrentArea } = useOfflineMap();
   const {
     activeAlert,
@@ -81,6 +95,25 @@ export default function TrackScreen() {
   const [saveRoadModalVisible, setSaveRoadModalVisible] = useState(false);
   const [completedMetrics, setCompletedMetrics] = useState<TripMetrics | null>(null);
   const [shareParams, setShareParams] = useState<GenerateRecapCardParams | null>(null);
+
+  const pitStopMarkers = React.useMemo(
+    () => pitStops.map((p) => ({ id: p.id, lon: p.lng, lat: p.lat })),
+    [pitStops],
+  );
+
+  const dashedSegments = React.useMemo(
+    () =>
+      pitStops
+        .filter((p) => p.resume_lat != null && p.resume_lng != null)
+        .map((p) => ({
+          id: `dash_${p.id}`,
+          fromLon: p.lng,
+          fromLat: p.lat,
+          toLon: p.resume_lng as number,
+          toLat: p.resume_lat as number,
+        })),
+    [pitStops],
+  );
 
   // Pulsing animation for the recording indicator
   const [recPulseAnim] = useState(() => new Animated.Value(1));
@@ -146,7 +179,7 @@ export default function TrackScreen() {
   const isAutoPaused = isTracking && currentSpeedKmh < 1.0;
 
   // Derived state: GPS Lock acquiring
-  const isGpsAcquiring = currentCoords === null || gpsAccuracy === null || gpsAccuracy > 25;
+  const isGpsAcquiring = isGpsWaiting || currentCoords === null || gpsAccuracy === null || gpsAccuracy > 30;
 
   const proceedWithTracking = async () => {
     try {
@@ -220,9 +253,12 @@ export default function TrackScreen() {
           <SlipstreamMap
             centerCoordinate={currentCoords ?? undefined}
             routeGeoJson={routeGeoJson}
-            followUser={isTracking}
+            followUser={isTracking && !isPitStopped}
             heading={heading}
             zoomLevel={16}
+            startCoord={startCoords}
+            pitStopMarkers={pitStopMarkers}
+            dashedSegments={dashedSegments}
           />
 
           {/* Floating Top Glass Pill */}
@@ -294,34 +330,50 @@ export default function TrackScreen() {
         <View style={[styles.bottomCockpitSheet, { paddingBottom: Math.max(insets.bottom + 8, 20) }]}>
           {/* Header Row: Vehicle info & Live Telemetry status */}
           <View style={styles.cockpitHeader}>
-            {primaryVehicle ? (
-              <View style={styles.vehicleChip}>
-                <Icon name="car" size={14} color={Colors.text.secondary} weight="regular" />
-                <Text style={styles.vehicleText} numberOfLines={1}>
-                  {primaryVehicle.year} {primaryVehicle.make} {primaryVehicle.model}
-                  {primaryVehicle.nickname ? ` · ${primaryVehicle.nickname}` : ''}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.vehicleChip}>
-                <Icon name="gauge" size={14} color={Colors.accent.cyan} weight="duotone" />
-                <Text style={styles.vehicleText}>Precision Telemetry</Text>
-              </View>
-            )}
+            <Pressable
+              style={({ pressed }) => [styles.vehicleChip, pressed && styles.btnPressed]}
+              onPress={() => {
+                if (isTracking) {
+                  Alert.alert('Recording in Progress', 'Stop recording to switch vehicles.');
+                  return;
+                }
+                setVehicleSwitcherVisible(true);
+              }}
+              hitSlop={8}
+            >
+              <Icon name="car" size={14} color={Colors.accent.cyan} weight="duotone" />
+              <Text style={styles.vehicleText} numberOfLines={1}>
+                {primaryVehicle
+                  ? `${primaryVehicle.year} ${primaryVehicle.make} ${primaryVehicle.model}${
+                      primaryVehicle.nickname ? ` · ${primaryVehicle.nickname}` : ''
+                    }`
+                  : 'Select Car'}
+              </Text>
+              <Icon name="caret-down" size={12} color={Colors.text.tertiary} />
+            </Pressable>
 
-            {/* Recording / Auto-paused badge */}
+            {/* Recording / Pit stop / Auto-paused badge */}
             {isTracking ? (
               <View style={styles.statusChipsRow}>
-                {isAutoPaused && (
-                  <View style={styles.autoPauseChip}>
-                    <Text style={styles.autoPauseText}>AUTO-PAUSED</Text>
+                {isPitStopped ? (
+                  <View style={styles.pitStopBadge}>
+                    <Icon name="pause" size={12} color={Colors.semantic.warning} weight="fill" />
+                    <Text style={styles.pitStopBadgeText}>PIT STOP</Text>
                   </View>
+                ) : (
+                  <>
+                    {isAutoPaused && (
+                      <View style={styles.autoPauseChip}>
+                        <Text style={styles.autoPauseText}>AUTO-PAUSED</Text>
+                      </View>
+                    )}
+                    <View style={styles.recBadge}>
+                      <Animated.View style={[styles.recDot, { opacity: recPulseAnim }]} />
+                      <Text style={styles.recText}>REC</Text>
+                      <Text style={styles.recDuration}>{formatDuration(elapsedSeconds)}</Text>
+                    </View>
+                  </>
                 )}
-                <View style={styles.recBadge}>
-                  <Animated.View style={[styles.recDot, { opacity: recPulseAnim }]} />
-                  <Text style={styles.recText}>REC</Text>
-                  <Text style={styles.recDuration}>{formatDuration(elapsedSeconds)}</Text>
-                </View>
               </View>
             ) : (
               <View style={styles.readyBadge}>
@@ -390,69 +442,48 @@ export default function TrackScreen() {
             </View>
           </View>
 
-          {/* Saved-Summary Sheet Banner (Explicit state after drive completion) */}
-          {completedMetrics && !isTracking && (
-            <View style={styles.savedBanner}>
-              <View style={styles.savedContent}>
-                <View style={styles.savedTitleRow}>
-                  <Icon name="check-circle" size={16} color={Colors.semantic.success} weight="fill" />
-                  <Text style={styles.savedTitle}>Drive Saved to Cloud</Text>
-                </View>
-                <Text style={styles.savedMeta}>
-                  {(completedMetrics.distanceMeters / 1000).toFixed(2)} km · Top {completedMetrics.topSpeedKmh} km/h · Avg {completedMetrics.avgSpeedKmh} km/h
-                </Text>
-              </View>
-
-              <View style={styles.savedActions}>
-                <TouchableOpacity
-                  style={styles.savedActionBtn}
-                  onPress={() => setSaveRoadModalVisible(true)}
-                  activeOpacity={0.8}
-                >
-                  <Icon name="bookmark" size={14} color={Colors.accent.cyan} weight="duotone" />
-                  <Text style={styles.savedActionText}>Save road</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.savedActionBtn, styles.savedShareBtn]}
-                  onPress={() =>
-                    setShareParams({
-                      type: 'trip',
-                      headline: 'SLIPSTREAM TELEMETRY RUN',
-                      topSpeedKmh: completedMetrics.topSpeedKmh,
-                      distanceMeters: completedMetrics.distanceMeters,
-                      durationSeconds: completedMetrics.durationSeconds,
-                      vehicleName: primaryVehicle
-                        ? `${primaryVehicle.year ?? ''} ${primaryVehicle.make} ${primaryVehicle.model}`.trim()
-                        : undefined,
-                    })
-                  }
-                  activeOpacity={0.8}
-                >
-                  <Icon name="share" size={14} color={Colors.text.primary} weight="regular" />
-                  <Text style={styles.savedActionText}>Share</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.savedDismissBtn}
-                  onPress={() => setCompletedMetrics(null)}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Dismiss summary"
-                >
-                  <Icon name="close" size={14} color={Colors.text.secondary} />
-                </TouchableOpacity>
-              </View>
-            </View>
+          {/* Pit Stop Controls (Live Timer + Tag Selector) */}
+          {isPitStopped && (
+            <PitStopControls
+              pitStopElapsedSeconds={pitStopElapsedSeconds}
+              currentTag={currentPitStopTag}
+              onSelectTag={setCurrentPitStopTag}
+            />
           )}
 
-          {/* Primary Action Button: Start Drive / Hold to Stop */}
+          {/* Primary Action Button: Start Drive / Pit Stop / Continue / Hold to Stop */}
           <TrackDriveButton
             isTracking={isTracking}
+            isPitStopped={isPitStopped}
+            isGpsWaiting={isGpsWaiting}
             isSaving={isSaving}
             onStart={handleStart}
             onStop={handleStop}
+            onPause={pauseTracking}
+            onResume={resumeTracking}
           />
         </View>
+
+        {/* Full Drive Recap & Route Snapshot Modal */}
+        <TripSummarySheet
+          visible={!!completedMetrics}
+          metrics={completedMetrics}
+          onClose={() => setCompletedMetrics(null)}
+          onShare={(_snapshotUrl) => {
+            if (!completedMetrics) return;
+            setShareParams({
+              type: 'trip',
+              headline: 'SLIPSTREAM TELEMETRY RUN',
+              topSpeedKmh: completedMetrics.topSpeedKmh,
+              distanceMeters: completedMetrics.distanceMeters,
+              durationSeconds: completedMetrics.durationSeconds,
+              vehicleName: primaryVehicle
+                ? `${primaryVehicle.year ?? ''} ${primaryVehicle.make} ${primaryVehicle.model}`.trim()
+                : undefined,
+            });
+          }}
+          onSaveRoad={() => setSaveRoadModalVisible(true)}
+        />
 
         {/* Modals & Dialogs */}
         <HazardReportModal
@@ -478,6 +509,11 @@ export default function TrackScreen() {
           onClose={() => setSaveRoadModalVisible(false)}
           routeWkt={completedMetrics?.lineStringWkt ?? null}
           distanceMeters={completedMetrics?.distanceMeters ?? 0}
+        />
+
+        <VehicleSwitcherSheet
+          visible={vehicleSwitcherVisible}
+          onClose={() => setVehicleSwitcherVisible(false)}
         />
       </View>
     </ScreenContainer>
@@ -664,6 +700,24 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontVariant: ['tabular-nums'],
   },
+  pitStopBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+  },
+  pitStopBadgeText: {
+    fontFamily: FontFamily.display,
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.semantic.warning,
+    letterSpacing: 0.5,
+  },
   readyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,5 +850,8 @@ const styles = StyleSheet.create({
   },
   savedDismissBtn: {
     padding: 4,
+  },
+  btnPressed: {
+    opacity: 0.65,
   },
 });

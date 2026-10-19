@@ -547,10 +547,18 @@ export type Database = {
           created_at: string
           distance_m: number
           duration_s: number
+          end_latlng: Json
           ended_at: string
           id: string
+          moving_time_s: number
+          pit_stop_count: number
+          pit_stop_total_s: number
+          pit_stops: Json
           route: unknown
+          route_points: Json
+          snapshot_url: string | null
           speed_samples: Json
+          start_latlng: Json
           started_at: string
           top_speed: number
           user_id: string
@@ -562,10 +570,18 @@ export type Database = {
           created_at?: string
           distance_m?: number
           duration_s?: number
+          end_latlng?: Json
           ended_at: string
           id?: string
+          moving_time_s?: number
+          pit_stop_count?: number
+          pit_stop_total_s?: number
+          pit_stops?: Json
           route?: unknown
+          route_points?: Json
+          snapshot_url?: string | null
           speed_samples?: Json
+          start_latlng?: Json
           started_at: string
           top_speed?: number
           user_id: string
@@ -577,10 +593,18 @@ export type Database = {
           created_at?: string
           distance_m?: number
           duration_s?: number
+          end_latlng?: Json
           ended_at?: string
           id?: string
+          moving_time_s?: number
+          pit_stop_count?: number
+          pit_stop_total_s?: number
+          pit_stops?: Json
           route?: unknown
+          route_points?: Json
+          snapshot_url?: string | null
           speed_samples?: Json
+          start_latlng?: Json
           started_at?: string
           top_speed?: number
           user_id?: string
@@ -2173,6 +2197,8 @@ export const Constants = {
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 export type Trip = Database['public']['Tables']['trips']['Row'];
+export type TripInsert = Database['public']['Tables']['trips']['Insert'];
+export type TripUpdate = Database['public']['Tables']['trips']['Update'];
 export type VehicleMake = Database['public']['Tables']['vehicle_makes']['Row'];
 export type VehicleModel = Database['public']['Tables']['vehicle_models']['Row'];
 export type Vehicle = Database['public']['Tables']['vehicles']['Row'];

@@ -10,9 +10,10 @@
  *  - Units setting changes speed and distance everywhere
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -38,7 +39,7 @@ import { GoogleLogo } from '@/components/ui/GoogleLogo';
 import { ClusterGauge } from '@/components/ui/ClusterGauge';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useVehicles } from '@/hooks/useVehicles';
+import { useVehicleContext } from '@/contexts/VehicleContext';
 import { useReferral } from '@/hooks/useReferral';
 import { usePreferences, type SpeedUnit } from '@/contexts/PreferencesContext';
 import { APP_DOMAIN } from '@/services/referrals';
@@ -53,6 +54,7 @@ import {
 import { useOtaUpdates } from '@/lib/updates';
 
 import { GarageCarousel } from '@/components/garage/GarageCarousel';
+import { VehicleEditSheet } from '@/components/garage/VehicleEditSheet';
 import { AttachDrivesModal } from '@/components/garage/AttachDrivesModal';
 import { AddVehicleModal } from '@/components/vehicles/AddVehicleModal';
 import { SupportSlipstreamModal } from '@/components/settings/SupportSlipstreamModal';
@@ -69,13 +71,15 @@ export default function SettingsScreen() {
   const { user, profile, signOut, signInWithGoogle, signInWithApple, status } = useAuth();
   const {
     vehicles,
+    primaryVehicle,
     isLoading: isLoadingGarage,
+    avatarSource,
     addVehicle,
-    setPrimary,
+    switchPrimary,
     removeVehicle,
     uploadPhoto,
     attachDrives,
-  } = useVehicles();
+  } = useVehicleContext();
   const { referralCode, totalReferrals, shareInvite, isLoading: isLoadingReferral } = useReferral();
   const { speedUnit, setSpeedUnit, currency, setCurrency, gaugeTheme, setGaugeTheme } = usePreferences();
   const { diagnostics, checkForUpdate, isChecking } = useOtaUpdates();
@@ -83,10 +87,21 @@ export default function SettingsScreen() {
   // Modals state
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
   const [editProfileVisible, setEditProfileVisible] = useState<boolean>(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [supportModalVisible, setSupportModalVisible] = useState<boolean>(false);
   const [deleteSheetVisible, setDeleteSheetVisible] = useState<boolean>(false);
   const [attachVehicle, setAttachVehicle] = useState<Vehicle | null>(null);
   const [maintenanceVehicle, setMaintenanceVehicle] = useState<{ id: string; name: string } | null>(null);
+
+  const avatarPhotoUrl = useMemo(() => {
+    if (avatarSource === 'car') {
+      return primaryVehicle?.photo_url ?? null;
+    }
+    if (avatarSource === 'custom') {
+      return profile?.avatar_url ?? null;
+    }
+    return null;
+  }, [avatarSource, primaryVehicle?.photo_url, profile?.avatar_url]);
 
   // Security & Toggles
   const [biometricEnabled, setBiometricEnabled] = useState<boolean>(false);
@@ -288,15 +303,19 @@ export default function SettingsScreen() {
             style={styles.avatarRing}
           >
             <View style={styles.avatarInner}>
-              <Text variant="heading" color={Colors.text.primary} style={styles.avatarInitial}>
-                {driverHandle.charAt(0).toUpperCase()}
-              </Text>
+              {avatarPhotoUrl ? (
+                <Image source={{ uri: avatarPhotoUrl }} style={styles.avatarPhoto} resizeMode="cover" />
+              ) : (
+                <Text variant="heading" color={Colors.text.primary} style={styles.avatarInitial}>
+                  {driverHandle.charAt(0).toUpperCase()}
+                </Text>
+              )}
             </View>
           </LinearGradient>
 
           <View style={styles.profileTextGroup}>
             <View style={styles.handleBadgeRow}>
-              <Text variant="title" color={Colors.text.primary} numberOfLines={1}>
+              <Text variant="heading" color={Colors.text.primary} numberOfLines={1} style={styles.handleText}>
                 @{driverHandle}
               </Text>
               {supporterBadge && (
@@ -354,8 +373,9 @@ export default function SettingsScreen() {
         isLoading={isLoadingGarage}
         onAddCar={() => setAddModalVisible(true)}
         onAttachDrives={(vehicle) => setAttachVehicle(vehicle)}
-        onSetPrimary={setPrimary}
+        onSetPrimary={switchPrimary}
         onPhotoPress={handlePhotoPress}
+        onEditCar={(vehicle) => setEditingVehicle(vehicle)}
         onMaintenancePress={handleMaintenancePress}
         onDeleteCar={removeVehicle}
       />
@@ -737,6 +757,12 @@ export default function SettingsScreen() {
         onClose={() => setEditProfileVisible(false)}
       />
 
+      <VehicleEditSheet
+        visible={!!editingVehicle}
+        vehicle={editingVehicle}
+        onClose={() => setEditingVehicle(null)}
+      />
+
       <SupportSlipstreamModal
         visible={supportModalVisible}
         onClose={() => setSupportModalVisible(false)}
@@ -797,12 +823,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: Spacing[4],
+    gap: Spacing[3],
   },
   profileHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[3],
     flex: 1,
+    minWidth: 0,
   },
   avatarRing: {
     width: 56,
@@ -819,6 +847,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface['1'],
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarPhoto: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitial: {
     fontFamily: FontFamily.numberBold,
@@ -826,18 +859,24 @@ const styles = StyleSheet.create({
   },
   profileTextGroup: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   handleBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing[2],
+    minWidth: 0,
+  },
+  handleText: {
+    fontSize: 18,
+    letterSpacing: -0.3,
   },
   supporterBadgeChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+    backgroundColor: Colors.accent.cyanGlow,
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: Radius.pill,
@@ -854,6 +893,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing[2],
     paddingHorizontal: Spacing[3],
     borderRadius: Radius.button,
+    flexShrink: 0,
   },
   btnPressed: {
     opacity: 0.7,

@@ -28,6 +28,8 @@ export interface StoryCardData {
   durationSeconds: number;
   dateStr?: string;
   referralCode?: string;
+  hideStartEnd?: boolean;
+  snapshotUrl?: string | null;
 }
 
 interface StoryCardViewProps {
@@ -169,9 +171,11 @@ export const StoryCardView = forwardRef<View, StoryCardViewProps>(function Story
 
       {/* Middle Cockpit Badge */}
       <View style={styles.telemetryTag}>
-        <Icon name="gauge" size={24} color={Colors.accent.cyan} />
+        <Icon name={data.hideStartEnd ? 'shield' : 'gauge'} size={24} color={Colors.accent.cyan} />
         <Text variant="label" color={Colors.text.secondary} style={styles.tagText}>
-          VERIFIED SENSOR TELEMETRY  •  GPS 10 HZ DYNAMICS
+          {data.hideStartEnd
+            ? 'VERIFIED SENSOR TELEMETRY  •  ROUTE START/END CONCEALED (300M)'
+            : 'VERIFIED SENSOR TELEMETRY  •  GPS 10 HZ DYNAMICS'}
         </Text>
       </View>
 

@@ -15,7 +15,8 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
-import { Colors, Radius, Spacing, Typography } from '@/constants/theme';
+import { Colors, FontFamily, Radius, Spacing, Typography } from '@/constants/theme';
+import * as Haptics from 'expo-haptics';
 import { Text } from '@/components/ui/Text';
 import { Icon } from '@/components/ui/Icon';
 import { StoryCardView, type StoryCardData } from '@/components/recap/StoryCardView';
@@ -47,14 +48,23 @@ export function ShareRecapModal({
   const cardRef = useRef<View>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hideStartEnd, setHideStartEnd] = useState(true);
 
   const storyData: StoryCardData | null = params
     ? buildStoryCardData(params, userHandle, vehicleName, country)
     : null;
 
-  if (storyData && referralCode) {
-    storyData.referralCode = referralCode;
+  if (storyData) {
+    storyData.hideStartEnd = hideStartEnd;
+    if (referralCode) {
+      storyData.referralCode = referralCode;
+    }
   }
+
+  const handleTogglePrivacy = async () => {
+    await Haptics.selectionAsync();
+    setHideStartEnd((prev) => !prev);
+  };
 
   const handleShare = useCallback(async () => {
     setLoading(true);
@@ -63,7 +73,7 @@ export function ShareRecapModal({
     // Short delay so the offscreen view has fully rendered before capture
     await new Promise<void>((r) => setTimeout(r, 150));
 
-    const result = await captureAndShareStoryCard(cardRef);
+    const result = await captureAndShareStoryCard(cardRef, { hideStartEnd });
     setLoading(false);
 
     if (result.success) {
@@ -71,7 +81,7 @@ export function ShareRecapModal({
     } else {
       setErrorMsg(result.error ?? 'Failed to capture telemetry card. Please try again.');
     }
-  }, [onClose]);
+  }, [onClose, hideStartEnd]);
 
   const handleRetry = useCallback(() => {
     setErrorMsg(null);
@@ -117,6 +127,40 @@ export function ShareRecapModal({
               </View>
             </View>
           </ScrollView>
+
+          {/* Privacy Toggle: Hide start/end address (300 m) */}
+          <Pressable style={styles.privacyRow} onPress={handleTogglePrivacy}>
+            <View style={styles.privacyLeft}>
+              <Icon
+                name="shield"
+                size={18}
+                color={hideStartEnd ? Colors.accent.cyan : Colors.text.tertiary}
+                weight="duotone"
+              />
+              <View style={styles.privacyTextCol}>
+                <Text variant="label" color={Colors.text.primary} style={styles.privacyTitle}>
+                  Hide start/end address (300 m)
+                </Text>
+                <Text style={styles.privacySub}>
+                  Default privacy protection for street sharing
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.toggleTrack,
+                hideStartEnd ? styles.toggleTrackActive : styles.toggleTrackInactive,
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  hideStartEnd ? styles.toggleThumbActive : styles.toggleThumbInactive,
+                ]}
+              />
+            </View>
+          </Pressable>
 
           {/* Error state */}
           {errorMsg && (
@@ -227,6 +271,63 @@ const styles = StyleSheet.create({
     height: 1920,
     transform: [{ scale: CARD_SCALE }],
     transformOrigin: 'top left',
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface['1'],
+    borderRadius: Radius.card,
+    padding: Spacing[3],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+    marginTop: Spacing[2],
+  },
+  privacyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  privacyTextCol: {
+    flex: 1,
+  },
+  privacyTitle: {
+    fontWeight: '600',
+  },
+  privacySub: {
+    fontFamily: FontFamily.body,
+    fontSize: 12,
+    color: Colors.text.tertiary,
+    marginTop: 2,
+  },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleTrackActive: {
+    backgroundColor: Colors.accent.cyan,
+  },
+  toggleTrackInactive: {
+    backgroundColor: Colors.surface['2'],
+    borderWidth: 1,
+    borderColor: Colors.hairline,
+  },
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+  },
+  toggleThumbActive: {
+    backgroundColor: Colors.bg.base,
+    alignSelf: 'flex-end',
+  },
+  toggleThumbInactive: {
+    backgroundColor: Colors.text.tertiary,
+    alignSelf: 'flex-start',
   },
   errorBox: {
     flexDirection: 'row',

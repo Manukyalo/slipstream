@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { RefreshCw, Sparkles } from 'lucide-react-native';
-import { Theme } from '@/constants/theme';
+import { Icon } from '@/components/ui/Icon';
+import { Colors, FontFamily, Radius, Spacing } from '@/constants/theme';
 
 interface OtaUpdateBannerProps {
   onRestart: () => void;
@@ -11,26 +11,29 @@ export function OtaUpdateBanner({ onRestart }: OtaUpdateBannerProps) {
   return (
     <View style={styles.container}>
       <View style={styles.inner}>
-        <View style={styles.left}>
+        <View style={styles.contentRow}>
           <View style={styles.iconWrap}>
-            <Sparkles size={14} color={Theme.colors.signalCyan} strokeWidth={2} />
+            <Icon name="sparkle" size={16} color={Colors.accent.cyan} weight="duotone" />
           </View>
-          <View>
-            <Text style={styles.title}>Update Ready</Text>
-            <Text style={styles.subtitle}>New telemetry updates are downloaded</Text>
+          <View style={styles.textGroup}>
+            <Text style={styles.title} numberOfLines={1}>
+              Update Ready
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={2}>
+              New telemetry updates downloaded
+            </Text>
           </View>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={onRestart}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Restart to apply update"
+          >
+            <Icon name="refresh" size={13} color={Colors.text.inverse} weight="bold" />
+            <Text style={styles.btnText}>Restart</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={onRestart}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Restart to apply update"
-        >
-          <RefreshCw size={13} color={Theme.colors.textInverse} strokeWidth={2.5} />
-          <Text style={styles.btnText}>Restart</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -39,64 +42,66 @@ export function OtaUpdateBanner({ onRestart }: OtaUpdateBannerProps) {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 50,
-    left: 16,
-    right: 16,
+    top: 54,
+    left: Spacing.screen,
+    right: Spacing.screen,
     zIndex: 9999,
-    shadowColor: '#000',
+    shadowColor: Colors.bg.base,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
     elevation: 10,
   },
   inner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Theme.colors.surfaceRaised,
-    borderRadius: Theme.radius.md,
+    backgroundColor: Colors.surface['2'],
+    borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: Theme.colors.signalCyan,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    borderColor: Colors.accent.cyan,
+    paddingVertical: Spacing[3],
+    paddingHorizontal: Spacing[3],
   },
-  left: {
+  contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
+    gap: Spacing[3],
   },
   iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: Theme.radius.full,
-    backgroundColor: 'rgba(52, 229, 240, 0.12)',
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.accent.cyanGlow,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  textGroup: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   title: {
-    fontFamily: Theme.fonts.bodySemiBold,
+    fontFamily: FontFamily.heading,
     fontSize: 13,
-    color: Theme.colors.textPrimary,
+    color: Colors.text.primary,
+    letterSpacing: -0.2,
   },
   subtitle: {
-    fontFamily: Theme.fonts.bodyRegular,
+    fontFamily: FontFamily.body,
     fontSize: 11,
-    color: Theme.colors.textSecondary,
-    marginTop: 1,
+    color: Colors.text.secondary,
+    marginTop: 2,
+    lineHeight: 15,
   },
   actionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: Theme.colors.signalCyan,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: Theme.radius.sm,
+    gap: Spacing[1],
+    backgroundColor: Colors.accent.cyan,
+    paddingVertical: Spacing[2],
+    paddingHorizontal: Spacing[3],
+    borderRadius: Radius.button,
   },
   btnText: {
-    fontFamily: Theme.fonts.bodyBold,
+    fontFamily: FontFamily.heading,
     fontSize: 12,
-    color: Theme.colors.textInverse,
+    color: Colors.text.inverse,
   },
 });

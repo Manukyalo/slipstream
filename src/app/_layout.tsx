@@ -21,6 +21,7 @@ import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PreferencesProvider } from '@/contexts/PreferencesContext';
+import { VehicleProvider } from '@/contexts/VehicleContext';
 import { TrackingProvider } from '@/contexts/TrackingContext';
 import { ToastProvider } from '@/components/ui/Toast';
 import { SplashGate } from '@/components/ui/SplashGate';
@@ -156,11 +157,13 @@ export default function RootLayout() {
       >
         <AuthProvider>
           <PreferencesProvider>
-            <TrackingProvider>
-              <ToastProvider>
-                <RootNavigation />
-              </ToastProvider>
-            </TrackingProvider>
+            <VehicleProvider>
+              <TrackingProvider>
+                <ToastProvider>
+                  <RootNavigation />
+                </ToastProvider>
+              </TrackingProvider>
+            </VehicleProvider>
           </PreferencesProvider>
         </AuthProvider>
       </PersistQueryClientProvider>
