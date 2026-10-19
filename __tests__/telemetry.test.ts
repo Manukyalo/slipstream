@@ -47,15 +47,15 @@ describe('Telemetry & GPS Math', () => {
   it('computes correct speed buckets, top speed, and duration', () => {
     const startTime = 1000000;
     const samples: GpsSample[] = [
-      { latitude: -1.2920, longitude: 36.8219, speed: 5, timestamp: startTime }, // 18 km/h -> 0-40 bucket
-      { latitude: -1.2922, longitude: 36.8221, speed: 15, timestamp: startTime + 2000 }, // 54 km/h -> 40-80 bucket
-      { latitude: -1.2924, longitude: 36.8223, speed: 28, timestamp: startTime + 4000 }, // 100.8 km/h -> 80-120 bucket
-      { latitude: -1.2926, longitude: 36.8225, speed: 38, timestamp: startTime + 6000 }, // 136.8 km/h -> 120+ bucket
+      { latitude: -1.2920, longitude: 36.8219, speed: 10, timestamp: startTime }, // 36 km/h -> 0-60 bucket
+      { latitude: -1.2922, longitude: 36.8221, speed: 20, timestamp: startTime + 2000 }, // 72 km/h -> 60-100 bucket
+      { latitude: -1.2924, longitude: 36.8223, speed: 30, timestamp: startTime + 4000 }, // 108 km/h -> 100-140 bucket
+      { latitude: -1.2926, longitude: 36.8225, speed: 42, timestamp: startTime + 6000 }, // 151.2 km/h -> 140+ bucket
     ];
 
     const metrics = computeTripMetrics(samples, startTime, startTime + 6000);
     assert.strictEqual(metrics.durationSeconds, 6);
-    assert.strictEqual(metrics.topSpeedKmh, 136.8);
+    assert.strictEqual(metrics.topSpeedKmh, 151.2);
     assert.strictEqual(metrics.speedBuckets.length, 4);
 
     // Each bucket had 1 sample out of 4 (25%)

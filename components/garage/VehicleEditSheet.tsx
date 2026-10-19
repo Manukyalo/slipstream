@@ -168,8 +168,10 @@ export function VehicleEditSheet({ visible, vehicle, onClose }: VehicleEditSheet
           </View>
 
           <ScrollView
+            style={styles.body}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {errorMsg && (
               <View style={styles.errorBox}>
@@ -298,14 +300,14 @@ export function VehicleEditSheet({ visible, vehicle, onClose }: VehicleEditSheet
                 )}
               </Card>
             )}
-
-            {/* Actions */}
-            <View style={styles.actionButtons}>
-              <Button variant="primary" onPress={handleSave} loading={saving}>
-                Save Changes
-              </Button>
-            </View>
           </ScrollView>
+
+          {/* Pinned Bottom Action */}
+          <View style={styles.footer}>
+            <Button variant="primary" onPress={handleSave} loading={saving}>
+              Save Vehicle Changes
+            </Button>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -319,29 +321,45 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
+    maxHeight: '92%',
+    height: '90%',
     backgroundColor: Colors.surface['1'],
     borderTopLeftRadius: Radius.sheet,
     borderTopRightRadius: Radius.sheet,
     borderWidth: 1,
     borderColor: Colors.hairline,
-    maxHeight: '90%',
-    padding: Spacing.screen,
-    gap: Spacing[4],
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: Spacing[1],
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[4],
+    paddingBottom: Spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.hairline,
   },
   closeBtn: {
     padding: Spacing[2],
     backgroundColor: Colors.surface['2'],
     borderRadius: Radius.iconChip,
   },
+  body: {
+    flex: 1,
+  },
   scrollContent: {
+    padding: Spacing.screen,
     gap: Spacing[4],
-    paddingBottom: Platform.OS === 'ios' ? Spacing.section : Spacing[4],
+    paddingBottom: Spacing[4],
+  },
+  footer: {
+    paddingHorizontal: Spacing.screen,
+    paddingTop: Spacing[3],
+    paddingBottom: Platform.OS === 'ios' ? Spacing.screen : Spacing[4],
+    borderTopWidth: 1,
+    borderTopColor: Colors.hairline,
+    backgroundColor: Colors.surface['1'],
   },
   errorBox: {
     backgroundColor: 'rgba(244, 63, 94, 0.1)',

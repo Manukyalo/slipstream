@@ -51,8 +51,13 @@ import type { PitStopTag } from '@/utils/telemetry';
 
 export const LOCATION_TRACKING_TASK = 'SLIPSTREAM_BACKGROUND_LOCATION_TASK';
 
-// GPS accuracy threshold for starting a drive
-const GPS_START_ACCURACY_M = 30;
+// GPS accuracy threshold for immediate start fix
+const GPS_START_ACCURACY_M = 35;
+// Adaptive fallback threshold if waiting > 4 seconds in difficult RF/urban conditions
+const GPS_FALLBACK_ACCURACY_M = 65;
+
+// Deadband speed threshold to eliminate stationary phone waving & sensor drift (km/h)
+const STATIONARY_SPEED_THRESHOLD_KMH = 2.5;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Global mutable buffers (module scope — survive context re-renders)
@@ -262,10 +267,15 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const handleNewSample = useCallback((sample: GpsSample) => {
     lastSampleRef.current = sample;
-    const kmh = msToKmh(sample.speed);
-    setCurrentSpeedKmh(kmh);
+    const rawKmh = msToKmh(sample.speed);
+    // Stationary deadband: phone waving or sensor noise under 2.5 km/h is clamped to 0
+    const filteredKmh = rawKmh < STATIONARY_SPEED_THRESHOLD_KMH ? 0 : rawKmh;
+
+    setCurrentSpeedKmh(filteredKmh);
     setCurrentCoords([sample.longitude, sample.latitude]);
-    setTopSpeedKmh((prev) => Math.max(prev, kmh));
+    if (filteredKmh >= 3.0) {
+      setTopSpeedKmh((prev) => Math.max(prev, filteredKmh));
+    }
     setSamples((prev) => [...prev, sample]);
   }, []);
 
@@ -295,7 +305,9 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               111_320 *
               Math.cos((active[i].latitude * Math.PI) / 180),
           );
-        if (d < 150) total += d;
+        // Ignore microscopic GPS drift when vehicle is stationary (< 0.7 m/s ≈ 2.5 km/h and < 3.5m)
+        const isStationaryJitter = active[i].speed < 0.7 && active[i - 1].speed < 0.7 && d < 3.5;
+        if (d < 150 && !isStationaryJitter) total += d;
       }
       setDistanceMeters(Number(total.toFixed(1)));
       return prev; // no mutation — just a read
@@ -369,11 +381,36 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const tripKey = generateClientId();
     currentTripKeyRef.current = tripKey;
     activeVehicleIdRef.current = activeVehicleId ?? primaryVehicle?.id ?? null;
-    startTimeRef.current = Date.now();
+    const requestStartMs = Date.now();
+    startTimeRef.current = requestStartMs;
 
-    // Subscribe to foreground location — wait for first good fix
     let startMarkerDropped = false;
 
+    const commitStartFix = (lat: number, lng: number) => {
+      if (startMarkerDropped) return;
+      startMarkerDropped = true;
+      setStartCoords([lng, lat]);
+      setPhase('recording');
+      startTimeRef.current = Date.now();
+      startMovingTimer();
+    };
+
+    // 1. Check if we ALREADY have a fresh accurate fix (from idle watcher or last known position)
+    try {
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown && lastKnown.coords) {
+        const acc = lastKnown.coords.accuracy ?? 999;
+        const ageMs = Date.now() - lastKnown.timestamp;
+        // If last known position is fresh (< 15 seconds old) and accurate (<= 35m)
+        if (ageMs < 15_000 && acc <= GPS_START_ACCURACY_M) {
+          commitStartFix(lastKnown.coords.latitude, lastKnown.coords.longitude);
+        }
+      }
+    } catch {
+      // Continue to active location acquisition
+    }
+
+    // 2. Subscribe to foreground location
     foregroundSubRef.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
@@ -396,13 +433,18 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           accuracy,
         };
 
-        // Transition to recording on first good fix
-        if (!startMarkerDropped && accuracy <= GPS_START_ACCURACY_M) {
-          startMarkerDropped = true;
-          setStartCoords([loc.coords.longitude, loc.coords.latitude]);
-          setPhase('recording');
-          startTimeRef.current = Date.now(); // reset timer from first good fix
-          startMovingTimer();
+        const elapsedSinceWait = Date.now() - requestStartMs;
+        // Immediate lock if accuracy <= 35m, or progressive lock if waiting > 4s and accuracy <= 65m,
+        // or safety fallback after 7s so the driver is never stuck waiting indefinitely
+        const acceptableAccuracy =
+          elapsedSinceWait > 7000
+            ? 150
+            : elapsedSinceWait > 4000
+            ? GPS_FALLBACK_ACCURACY_M
+            : GPS_START_ACCURACY_M;
+
+        if (!startMarkerDropped && accuracy <= acceptableAccuracy) {
+          commitStartFix(loc.coords.latitude, loc.coords.longitude);
         }
 
         if (startMarkerDropped) {
@@ -411,6 +453,17 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
       },
     );
+
+    // 3. Concurrently kick off getCurrentPositionAsync to bypass watchPosition delay on Android
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+      .then((curr) => {
+        if (!curr || startMarkerDropped) return;
+        const acc = curr.coords.accuracy ?? 999;
+        if (acc <= GPS_START_ACCURACY_M) {
+          commitStartFix(curr.coords.latitude, curr.coords.longitude);
+        }
+      })
+      .catch(() => {});
 
     // Start background task (keeps running screen-off and during pit stops)
     try {
