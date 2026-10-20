@@ -29,6 +29,8 @@ import { useHazardAlerts } from '@/hooks/useHazardAlerts';
 import { SlipstreamMap } from '@/components/map/SlipstreamMap';
 import { ClusterGauge } from '@/components/ui/ClusterGauge';
 import { TrackTopPill } from '@/components/tracking/TrackTopPill';
+import { TrackConnectivityChip } from '@/components/tracking/TrackConnectivityChip';
+import { GpsDiagnosticsModal } from '@/components/tracking/GpsDiagnosticsModal';
 import { TrackDriveButton } from '@/components/tracking/TrackDriveButton';
 import { PitStopControls } from '@/components/tracking/PitStopControls';
 import { TripSummarySheet } from '@/components/recap/TripSummarySheet';
@@ -66,11 +68,13 @@ export default function TrackScreen() {
     distanceMeters,
     currentCoords,
     gpsAccuracy,
+    consecutiveGoodFixes,
     heading,
     startCoords,
     pitStops,
     currentPitStopTag,
     routeGeoJson,
+    diagnostics,
     startTracking,
     stopTracking,
     pauseTracking,
@@ -82,6 +86,7 @@ export default function TrackScreen() {
 
   const { primaryVehicle } = useVehicleContext();
   const [vehicleSwitcherVisible, setVehicleSwitcherVisible] = useState(false);
+  const [diagnosticsModalVisible, setDiagnosticsModalVisible] = useState(false);
   const { downloadState, downloadCurrentArea } = useOfflineMap();
   const {
     activeAlert,
@@ -173,13 +178,20 @@ export default function TrackScreen() {
 
   // Average speed in km/h with 1 decimal place
   const avgSpeed =
-    elapsedSeconds > 0 ? ((distanceMeters / elapsedSeconds) * 3.6).toFixed(1) : '0.0';
+    isTracking && elapsedSeconds > 0 && distanceMeters > 0
+      ? ((distanceMeters / elapsedSeconds) * 3.6).toFixed(1)
+      : '0.0';
 
   // Derived state: Auto-paused when recording but vehicle is stationary
   const isAutoPaused = isTracking && currentSpeedKmh < 1.0;
 
-  // Derived state: GPS Lock acquiring
-  const isGpsAcquiring = isGpsWaiting || currentCoords === null || gpsAccuracy === null || gpsAccuracy > 30;
+  // Derived state: GPS Lock acquiring (consecutive fixes < 3 or accuracy > 25m)
+  const isGpsAcquiring =
+    isGpsWaiting ||
+    currentCoords === null ||
+    gpsAccuracy === null ||
+    gpsAccuracy > 25 ||
+    consecutiveGoodFixes < 3;
 
   const proceedWithTracking = async () => {
     try {
@@ -265,6 +277,7 @@ export default function TrackScreen() {
           <View style={[styles.topPillWrapper, { top: insets.top + 8 }]}>
             <TrackTopPill
               gpsAccuracy={gpsAccuracy}
+              consecutiveGoodFixes={consecutiveGoodFixes}
               downloadState={
                 downloadState.isDownloading
                   ? 'downloading'
@@ -281,12 +294,18 @@ export default function TrackScreen() {
                 }
                 setReportModalVisible(true);
               }}
+              onLongPressGps={() => setDiagnosticsModalVisible(true)}
             />
+          </View>
+
+          {/* Slim Connectivity Chip (never overlapping status bar) */}
+          <View style={[styles.connectivityWrapper, { top: insets.top + 52 }]}>
+            <TrackConnectivityChip />
           </View>
 
           {/* Approaching Hazard Alert Banner */}
           {activeAlert && (
-            <View style={[styles.alertBannerWrapper, { top: insets.top + 64 }]}>
+            <View style={[styles.alertBannerWrapper, { top: insets.top + 88 }]}>
               <HazardAlertBanner
                 hazard={activeAlert}
                 onConfirm={confirmCurrentHazard}
@@ -389,14 +408,14 @@ export default function TrackScreen() {
           <View style={styles.gaugeContainer}>
             <ClusterGauge
               mode="live"
-              speedKmh={currentSpeedKmh}
+              speedKmh={isTracking ? currentSpeedKmh : 0}
               maxSpeedKmh={260}
               longitudinalG={longitudinalG}
-              tripDistanceKm={distanceMeters / 1000}
+              tripDistanceKm={isTracking ? distanceMeters / 1000 : 0}
               gpsStatus={isGpsAcquiring ? 'acquiring' : 'locked'}
               vehiclePhotoUrl={primaryVehicle?.photo_url}
               vehicleLabel={primaryVehicle ? `${primaryVehicle.year} ${primaryVehicle.make} ${primaryVehicle.model}` : undefined}
-              hasData={isTracking || currentSpeedKmh > 0}
+              hasData={isTracking && !isGpsAcquiring}
             />
           </View>
 
@@ -410,7 +429,7 @@ export default function TrackScreen() {
               </View>
               <View style={styles.metricValueRow}>
                 <Text style={styles.metricValue}>
-                  {(distanceMeters / 1000).toFixed(2)}
+                  {isTracking ? (distanceMeters / 1000).toFixed(2) : '0.00'}
                 </Text>
                 <Text style={styles.metricUnit}>km</Text>
               </View>
@@ -424,7 +443,7 @@ export default function TrackScreen() {
               </View>
               <View style={styles.metricValueRow}>
                 <Text style={styles.metricValue}>
-                  {formatDuration(elapsedSeconds)}
+                  {isTracking ? formatDuration(elapsedSeconds) : '00:00'}
                 </Text>
               </View>
             </View>
@@ -436,7 +455,9 @@ export default function TrackScreen() {
                 <Text style={styles.metricLabel}>AVERAGE</Text>
               </View>
               <View style={styles.metricValueRow}>
-                <Text style={styles.metricValue}>{avgSpeed}</Text>
+                <Text style={styles.metricValue}>
+                  {isTracking && elapsedSeconds > 0 && distanceMeters > 0 ? avgSpeed : '—'}
+                </Text>
                 <Text style={styles.metricUnit}>km/h</Text>
               </View>
             </View>
@@ -515,6 +536,12 @@ export default function TrackScreen() {
           visible={vehicleSwitcherVisible}
           onClose={() => setVehicleSwitcherVisible(false)}
         />
+
+        <GpsDiagnosticsModal
+          visible={diagnosticsModalVisible}
+          onClose={() => setDiagnosticsModalVisible(false)}
+          data={diagnostics}
+        />
       </View>
     </ScreenContainer>
   );
@@ -534,6 +561,13 @@ const styles = StyleSheet.create({
     left: Spacing.screen,
     right: Spacing.screen,
     zIndex: 20,
+  },
+  connectivityWrapper: {
+    position: 'absolute',
+    left: Spacing.screen,
+    right: Spacing.screen,
+    alignItems: 'center',
+    zIndex: 19,
   },
   alertBannerWrapper: {
     position: 'absolute',

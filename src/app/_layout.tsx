@@ -30,7 +30,6 @@ import { BiometricLockScreen } from '@/components/security/BiometricLockScreen';
 import { isBiometricLockEnabled, authenticateWithBiometrics } from '@/services/biometrics';
 import { Colors } from '@/constants/theme';
 import { startOfflineSync, stopOfflineSync } from '@/services/offlineQueue';
-import { OfflineSyncBanner } from '@/components/ui/OfflineSyncBanner';
 import { useOtaUpdates } from '@/lib/updates';
 import { OtaUpdateBanner } from '@/components/ui/OtaUpdateBanner';
 import { detectAndSaveLaunchReferral } from '@/services/referrals';
@@ -133,7 +132,6 @@ function RootNavigation() {
       ) : (
         <>
           {isUpdateReady && <OtaUpdateBanner onRestart={applyUpdateNow} />}
-          <OfflineSyncBanner />
           <Slot />
         </>
       )}

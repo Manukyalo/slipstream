@@ -21,25 +21,29 @@ import { Icon } from '@/components/ui/Icon';
 
 interface TrackTopPillProps {
   gpsAccuracy: number | null;
+  consecutiveGoodFixes?: number;
   downloadState?: string;
   downloadPercentage?: number;
   onOfflineMapPress: () => void;
   onReportHazardPress: () => void;
+  onLongPressGps?: () => void;
 }
 
 export function TrackTopPill({
   gpsAccuracy,
+  consecutiveGoodFixes = 0,
   downloadState,
   downloadPercentage,
   onOfflineMapPress,
   onReportHazardPress,
+  onLongPressGps,
 }: TrackTopPillProps) {
   // Pulse animation for Acquiring GPS state
   const [pulseAnim] = useState(() => new Animated.Value(1));
 
-  const isAcquiring = gpsAccuracy === null || gpsAccuracy > 25;
-  const isGood = gpsAccuracy !== null && gpsAccuracy <= 10;
-  const isWeak = gpsAccuracy !== null && gpsAccuracy > 10 && gpsAccuracy <= 25;
+  const isAcquiring = gpsAccuracy === null || gpsAccuracy > 25 || consecutiveGoodFixes < 3;
+  const isGood = !isAcquiring && gpsAccuracy !== null && gpsAccuracy <= 10;
+  const isWeak = !isAcquiring && gpsAccuracy !== null && gpsAccuracy > 10 && gpsAccuracy <= 25;
 
   useEffect(() => {
     let loop: Animated.CompositeAnimation | null = null;
@@ -70,16 +74,25 @@ export function TrackTopPill({
   // Dot color & text
   const qualityColor = isGood
     ? Colors.semantic.success
-    : isWeak
-    ? Colors.semantic.warning
     : Colors.semantic.warning;
 
-  const qualityText = isGood ? 'GPS Good' : isWeak ? 'GPS Weak' : 'Acquiring';
+  const qualityText = isGood
+    ? `Good · ${Math.round(gpsAccuracy!)}m`
+    : isWeak
+    ? `Weak · ${Math.round(gpsAccuracy!)}m`
+    : 'Acquiring';
 
   return (
     <View style={styles.glassContainer}>
-      {/* ── 1. GPS Quality Indicator ── */}
-      <View style={styles.section}>
+      {/* ── 1. GPS Quality Indicator (long press for diagnostics) ── */}
+      <TouchableOpacity
+        style={styles.section}
+        activeOpacity={0.7}
+        onLongPress={onLongPressGps}
+        delayLongPress={500}
+        accessibilityRole="button"
+        accessibilityLabel={`GPS Status: ${qualityText}. Long press for diagnostics.`}
+      >
         <Animated.View
           style={[
             styles.dot,
@@ -87,7 +100,7 @@ export function TrackTopPill({
           ]}
         />
         <Text style={styles.qualityLabel}>{qualityText}</Text>
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.divider} />
 
