@@ -60,55 +60,6 @@ Every trip, drag run, and circuit split is recorded locally with offline-first r
 
 ---
 
-## 🏛️ Architecture & Data Flow
-
-```mermaid
-flowchart TD
-    subgraph Device["Mobile Device (Android / iOS)"]
-        Sensors["GPS (Doppler) + Accelerometer (3-Axis)"]
-        Sensors --> SensorFusion["Sensor Fusion & Noise Deadband Filter"]
-        SensorFusion --> HUD["Live Cockpit HUD & Audio/Haptic Engine"]
-        SensorFusion --> OfflineDB[("SQLite Offline Queue")]
-        Biometrics["Biometric Gatekeeper (SecureStore)"]
-    end
-
-    subgraph Sync["Sync & Network Engine"]
-        OfflineDB -->|"Batch Sync (When Online)"| EdgeGateway["Supabase Edge Functions"]
-        EdgeGateway --> Validation["Physical Plausibility & Anti-Cheat"]
-    end
-
-    subgraph Backend["Cloud Infrastructure (Supabase Postgres)"]
-        Validation --> RLS["Row Level Security (RLS)"]
-        RLS --> Tables[("Trips, Drag Runs, Circuits, Hazards")]
-        Tables --> RoutePrivacy["Route Sanitizer (300m Trim & Geofence)"]
-        Tables --> Pruning["30-Day Coordinate Minimization"]
-    end
-
-    subgraph Distribution["Client UI & Sharing"]
-        Tables --> ReactQuery["TanStack Query (Persisted Cache)"]
-        ReactQuery --> AppUI["Slipstream App UI (Expo Router)"]
-        AppUI --> ShareCard["Social Story & Recap Card Generation"]
-    end
-```
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technologies |
-| :--- | :--- |
-| **Framework & Runtime** | [React Native 0.86](https://reactnative.dev), [Expo SDK 57](https://expo.dev), React 19 |
-| **Navigation & Routing** | [Expo Router](https://docs.expo.dev/router/introduction/) (File-based routing) |
-| **Language & Typing** | [TypeScript](https://www.typescriptlang.org) (Strict mode enabled, zero `any`) |
-| **Backend & Database** | [Supabase](https://supabase.com) (PostgreSQL, Row Level Security, Edge Functions) |
-| **State & Cache** | [TanStack React Query v5](https://tanstack.com/query) with SQLite & AsyncStorage persistence |
-| **Sensors & Hardware** | `expo-location`, `expo-sensors`, `expo-haptics`, `expo-local-authentication` |
-| **Security & Storage** | `expo-secure-store` (Hardware KeyStore / Keychain), AES-256 |
-| **Vector & Graphics** | `react-native-svg`, `expo-linear-gradient`, `lucide-react-native` |
-| **Build & Deploy** | EAS Build, EAS Submit, `expo-updates` (Over-The-Air deployment) |
-
----
-
 ## 📁 Repository Structure
 
 ```
