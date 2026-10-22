@@ -60,43 +60,6 @@ Every trip, drag run, and circuit split is recorded locally with offline-first r
 
 ---
 
-## 📁 Repository Structure
-
-```
-slipstream/
-├── .well-known/           # Android Digital Asset Links & Apple App Site Association
-├── api/                   # Vercel serverless functions & deep-link redirects
-├── app/                   # Web deep link redirect handlers
-├── assets/                # App icons, splash screens, and brand imagery
-├── components/            # Domain-driven modular React Native components
-│   ├── circuit/           # Gate definitions, lap timers, sector splits
-│   ├── drag/              # Christmas tree staging, time slip cards
-│   ├── garage/            # Vehicle cards, spec chips, maintenance logs
-│   ├── hazards/           # Radar zone cards, hazard submission sheets
-│   ├── map/               # High-contrast MapLibre HUD & vector lines
-│   ├── security/          # Biometric lock screen, privacy zone managers
-│   ├── tracking/          # Live speedometer, drive controls, GPS status
-│   └── ui/                # Base design system (GlassCard, Button, Badge)
-├── constants/             # Design tokens, color palette, typography scales
-├── contexts/              # Global React contexts (Auth, Vehicles, Location)
-├── hooks/                 # Custom React hooks (telemetry, updates, offline queue)
-├── services/              # External APIs, biometrics, SQLite queue, Supabase client
-├── src/app/               # Expo Router screens
-│   ├── (auth)/            # Sign-in, sign-up, password recovery
-│   ├── (tabs)/            # Main cockpit tabs (Track, Drag, Circuit, Roads, Garage)
-│   └── _layout.tsx        # Root navigator with biometric & OTA gates
-├── supabase/              # Database migrations, seed data, and Edge Functions
-│   ├── functions/         # Deno Edge Functions (account wipe, recap cards, hazards)
-│   └── migrations/        # Versioned SQL migrations with RLS policies
-├── AGENTS.md              # Engineering rules & AI collaboration guide
-├── DOMAINS.md             # Custom domain DNS, Vercel & App Link verification
-├── SECURITY.md            # Threat model, data privacy, and encryption specifications
-├── TESTING.md             # QA test matrix, thermal profiling, and regression checklist
-└── UPDATES.md             # EAS Over-The-Air (OTA) updates & branch matrix
-```
-
----
-
 ## 🚀 Getting Started
 
 ### Prerequisites
